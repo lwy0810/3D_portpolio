@@ -8034,13 +8034,16 @@ MonoBehaviour:
   _flow: {fileID: 0}
   _runStateName: RunForward
   _attackStateName: Attack1
+  _attackImpactDelay: 0.4
+  _attackAnimSeconds: 1.5
   _combatTextDuration: 1
   _combatTextRisePx: 60
   _combatTextFontSizePx: 40
   _damageColor: {r: 1, g: 0.95, b: 0.85, a: 1}
   _criticalColor: {r: 1, g: 0.72, b: 0.2, a: 1}
   _avoidColor: {r: 0.7, g: 0.85, b: 1, a: 1}
-  _combatTextDebugHold: 1
+  _combatTextDebugHold: 0
+  _combatTextDebugBackground: 0
   Monsters: []
   Characters: []
   _battleMemberList: []

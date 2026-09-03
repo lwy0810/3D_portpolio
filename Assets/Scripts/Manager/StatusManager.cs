@@ -43,6 +43,9 @@ public class StatusManager : MonoBehaviour
         _masterCharacterStats[name] = stat;
     }
 
+    // 전멸(패배) 시 파티를 되살리는 등, 캐릭터별 저장 스탯 전체를 순회해야 하는 경우를 위한 접근자.
+    public IEnumerable<Stat> AllCharacterStats => _masterCharacterStats.Values;
+
 
 
 }

@@ -1,4 +1,4 @@
-Id,Leader,name,category,element,lv,hp,maxHp,ep,sp,atk,def,speed,avoid,cri,criDmg,hit,experience
-1,TRUE,Ubi,character,water,1,700,700,100,100,50,50,35,0.1,0.1,0.5,0.1,1000
-2,FALSE,Gwanwoo,character,wind,1,1000,1000,100,100,100,90,30,0.1,0.1,0.5,0.1,1000
-3,FALSE,Zangbi,character,fire,1,900,900,100,100,80,70,50,0.1,0.1,0.5,0.1,1000
+index,Leader,name,category,element,lv,hp,maxHp,ep,sp,atk,def,speed,avoid,cri,criDmg,hit,experience,ats,adf,dex,agl,maxBreak
+1,TRUE,Ubi,character,water,1,700,700,100,100,300,50,35,0.1,0.1,0.5,0.1,1000,60,45,20,12,0
+2,FALSE,Gwanwoo,character,wind,1,1000,1000,100,100,600,90,30,0.1,0.1,0.5,0.1,1000,40,60,18,8,0
+3,FALSE,Zangbi,character,fire,1,900,900,100,100,500,70,50,0.1,0.1,0.5,0.1,1000,70,50,22,16,0

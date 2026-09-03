@@ -1,11 +1,6 @@
-using NUnit.Framework.Constraints;
-using System.Collections;
 using System.Collections.Generic;
-using System.Xml.Linq;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-
 
 public class UnitCreateSystem : MonoBehaviour
 {
@@ -18,161 +13,168 @@ public class UnitCreateSystem : MonoBehaviour
     private Vector3 fieldPositionOffest = new Vector3(0.0f, 0.0f, -2.0f);
     private Vector3 battlePositionOffest = new Vector3(-3.0f, 0.0f, 0.0f);
 
-    void Start()
-    {
-    }
-
-    void Update()
-    {
-    }
+    private const int BattleMonsterCount = 3;
 
     public void CharacterCreate(GameObject[] _characterPrefabs)
     {
-        string text = CSVFileLoader.OnCharacterLoadCSV("CharacterStatus");
-        Debug.Log(text);
+        CsvTable csv = CSVFileLoader.LoadTable("CharacterStatus");
 
-        string[] _csvDataList = text.Split('\n');
+        if (csv.Rows.Count < _characterPrefabs.Length)
+        {
+            Debug.LogError($"[UnitCreateSystem] CharacterStatus.csv 행({csv.Rows.Count})이 " +
+                           $"프리팹 수({_characterPrefabs.Length})보다 적습니다.");
+        }
 
-        Debug.Log(text);
         for (int i = 0; i < _characterPrefabs.Length; i++)
         {
             if (SceneManager.GetActiveScene().name == "Field")
             {
-                if (GameManager.GameInstance.IsInit == true)
-                {
-                    GameManager.GameInstance.Characters.Add
-                        (Instantiate(_characterPrefabs[i], InitCharacterPos + (i * fieldPositionOffest), Quaternion.identity));
-                }
-                else
-                {
-                    GameManager.GameInstance.Characters.Add(
-                        Instantiate(_characterPrefabs[i], returnCharacterPos + (i * fieldPositionOffest), Quaternion.identity));
-                }
+                Vector3 basePos = GameManager.GameInstance.IsInit ? InitCharacterPos : returnCharacterPos;
 
-                if (i > 0)
-                {
-                    GameManager.GameInstance.Characters[i].gameObject.SetActive(false);
-                }
+                GameManager.GameInstance.Characters.Add(
+                    Instantiate(_characterPrefabs[i], basePos + (i * fieldPositionOffest), Quaternion.identity));
+
+                if (i > 0) GameManager.GameInstance.Characters[i].SetActive(false);
             }
             else if (SceneManager.GetActiveScene().name == "CommandBattle")
             {
-                GameManager.GameInstance.Characters.Add
-                    (Instantiate(_characterPrefabs[i], Vector3.zero + (i * battlePositionOffest), Quaternion.identity));
+                GameManager.GameInstance.Characters.Add(
+                    Instantiate(_characterPrefabs[i], Vector3.zero + (i * battlePositionOffest), Quaternion.identity));
 
-                GameManager.GameInstance.Units.Add(GameManager.GameInstance.Characters[i].GetComponent<Character>());
+                GameManager.GameInstance.Units.Add(
+                    GameManager.GameInstance.Characters[i].GetComponent<Character>());
             }
 
-            GameManager.GameInstance.CharacterComponents.Add(GameManager.GameInstance.Characters[i].GetComponent<Character>());
-            Character _characterComponent = GameManager.GameInstance.CharacterComponents[i];
-            CharacterStat(_csvDataList[i + 1], _characterComponent);
+            GameManager.GameInstance.CharacterComponents.Add(
+                GameManager.GameInstance.Characters[i].GetComponent<Character>());
 
+            Character _characterComponent = GameManager.GameInstance.CharacterComponents[i];
+
+            if (i < csv.Rows.Count) CharacterStat(csv.Rows[i], _characterComponent);
         }
     }
 
     public void MonsterCreate(GameObject _monsterPrefabs)
     {
-        List<Monster> _monsters = new List<Monster>();
+        CsvTable csv = CSVFileLoader.LoadTable("MonsterStatus");
 
-        string text = CSVFileLoader.OnMonsterLoadCSV("MonsterStatus");
+        if (csv.Rows.Count == 0)
+        {
+            Debug.LogError("[UnitCreateSystem] MonsterStatus.csv 에 데이터 행이 없습니다.");
+            return;
+        }
 
-        string[] _csvDataList = text.Split('\n');
-
+        CsvTable.Row row = csv.Rows[0];
 
         if (SceneManager.GetActiveScene().name == "Field")
         {
-            if (GameManager.GameInstance.IsInit == true)
-            {
-                GameManager.GameInstance.Monster = 
-                    Instantiate(_monsterPrefabs, InitMonsterPos, Quaternion.Euler(0.0f, 180.0f, 0.0f));
-            }
-            else
-            {
-                GameManager.GameInstance.Monster = 
-                    Instantiate(_monsterPrefabs, returnMonsterPos, Quaternion.Euler(0.0f, 180.0f, 0.0f));
-            }
-            Monster _monsterComponent = GameManager.GameInstance.Monster.GetComponent<Monster>();
-            MonsterStat(_csvDataList[1], _monsterComponent);
+            Vector3 basePos = GameManager.GameInstance.IsInit ? InitMonsterPos : returnMonsterPos;
+
+            GameManager.GameInstance.Monster =
+                Instantiate(_monsterPrefabs, basePos, Quaternion.Euler(0.0f, 180.0f, 0.0f));
+
+            MonsterStat(row, GameManager.GameInstance.Monster.GetComponent<Monster>());
         }
         else if (SceneManager.GetActiveScene().name == "CommandBattle")
         {
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < BattleMonsterCount; i++)
             {
-                GameManager.GameInstance.Monsters.Add
-                    (Instantiate(_monsterPrefabs, (Vector3.zero + new Vector3(i * -3.0f, 0.0f, 10.0f)), Quaternion.Euler(0.0f, 180.0f, 0.0f)));
+                GameManager.GameInstance.Monsters.Add(
+                    Instantiate(_monsterPrefabs,
+                                Vector3.zero + new Vector3(i * -3.0f, 0.0f, 10.0f),
+                                Quaternion.Euler(0.0f, 180.0f, 0.0f)));
+
                 Monster _monsterComponent = GameManager.GameInstance.Monsters[i].GetComponent<Monster>();
-                MonsterStat(_csvDataList[1], _monsterComponent);
-                GameManager.GameInstance.Units.Add(GameManager.GameInstance.Monsters[i].GetComponent<Monster>());
+
+                // 몬스터는 개체마다 다른 Stat 을 가져야 한다. 3기가 같은 인스턴스를
+                // 참조하면 한 마리가 맞을 때 세 마리 체력이 함께 줄어든다.
+                MonsterStat(row, _monsterComponent);
+
+                GameManager.GameInstance.Units.Add(_monsterComponent);
             }
-        }  
+        }
     }
 
-    private void CharacterStat(string _characterCsvDataRow, Character _character)
-    {
-        Debug.Log("111" + _characterCsvDataRow);
-        string[] _characteCsvData = _characterCsvDataRow.Split(',');
-        string _name = _characteCsvData[2];
+    // ── 스탯 부여 ───────────────────────────────────────────
 
-        Debug.Log("2. name : " + _name);
+    /// <summary>
+    /// 캐릭터 스탯. StatusManager 에 캐시가 있으면 그 참조를 그대로 연결한다.
+    /// 값을 복사하지 않으므로 씬이 바뀌어도 Hp / Cp / Ep 가 유지된다.
+    /// </summary>
+    private void CharacterStat(CsvTable.Row row, Character _character)
+    {
+        string _name = row.GetString("name");
+
+        if (string.IsNullOrEmpty(_name))
+        {
+            Debug.LogError($"[UnitCreateSystem] CharacterStatus.csv line {row.LineNumber} : name 이 비어 있습니다.");
+            return;
+        }
 
         Stat _stat;
 
-        if(StatusManager.StatusInstance.HasCharacterStat(_name))
+        if (StatusManager.StatusInstance.HasCharacterStat(_name))
         {
             _stat = StatusManager.StatusInstance.GetCharacterStat(_name);
-        } 
+        }
         else
         {
-            _stat = new Stat();
-
-            _stat.Leader = _characteCsvData[1];
-            _stat.Name = _characteCsvData[2];
-            _stat.Category = _characteCsvData[3];
-            _stat.Element = _characteCsvData[4];
-            _stat.Level = int.Parse(_characteCsvData[5]);
-            _stat.Hp = int.Parse(_characteCsvData[6]);
-            _stat.MaxHp = int.Parse(_characteCsvData[7]);
-            _stat.EnergyPoint = int.Parse(_characteCsvData[8]);
-            _stat.SpecialPoint = int.Parse(_characteCsvData[9]);
-            _stat.Atk = int.Parse(_characteCsvData[10]);
-            _stat.Def = int.Parse(_characteCsvData[11]);
-            _stat.Speed = int.Parse(_characteCsvData[12]);
-            _stat.Avoid = float.Parse(_characteCsvData[13]);
-            _stat.Critical = float.Parse(_characteCsvData[14]);
-            _stat.CriticalDmg = float.Parse(_characteCsvData[15]);
-            _stat.Hit = float.Parse(_characteCsvData[16]);
-            _stat.Experience = int.Parse(_characteCsvData[17]);
-
+            _stat = BuildStat(row, isCharacter: true);
             StatusManager.StatusInstance.RegisterCharacterStat(_name, _stat);
         }
 
         _character.SetStat(_stat);
-
     }
 
-    private void MonsterStat(string _monsterCsvDataRow, Monster _monster)
+    /// <summary>몬스터 스탯. 매번 새로 만든다 (영속 대상이 아님).</summary>
+    private void MonsterStat(CsvTable.Row row, Monster _monster)
     {
-        string[] _monsterCsvData = _monsterCsvDataRow.Split(',');
-
-        Stat _stat;
-
-        _stat = new Stat();
-        _stat.Name = _monsterCsvData[1];
-        _stat.Category = _monsterCsvData[2];
-        _stat.Element = _monsterCsvData[3];
-        _stat.Level = int.Parse(_monsterCsvData[4]);
-        _stat.Hp = int.Parse(_monsterCsvData[5]);
-        _stat.MaxHp = int.Parse(_monsterCsvData[6]);
-        _stat.EnergyPoint = int.Parse(_monsterCsvData[7]);
-        _stat.SpecialPoint = int.Parse(_monsterCsvData[8]);
-        _stat.Atk = int.Parse(_monsterCsvData[9]);
-        _stat.Def = int.Parse(_monsterCsvData[10]);
-        _stat.Speed = int.Parse(_monsterCsvData[11]);
-        _stat.Avoid = float.Parse(_monsterCsvData[12]);
-        _stat.Critical = float.Parse(_monsterCsvData[13]);
-        _stat.Experience = int.Parse(_monsterCsvData[14]);
-
-        _monster.SetStat(_stat);
-
+        _monster.SetStat(BuildStat(row, isCharacter: false));
     }
 
+    /// <summary>
+    /// 컬럼 이름으로 읽으므로 CSV 에 컬럼을 추가하거나 순서를 바꿔도 이 코드는 그대로다.
+    /// 없는 컬럼은 fallback 이 적용된다.
+    /// </summary>
+    private Stat BuildStat(CsvTable.Row row, bool isCharacter)
+    {
+        Stat s = new Stat();
+
+        if (isCharacter) s.Leader = row.GetString("Leader", "FALSE");
+
+        s.Name = row.GetString("name");
+        s.Category = row.GetString("category", isCharacter ? "character" : "monster");
+        s.Element = row.GetString("element", "none");
+        s.Level = row.GetInt("lv", 1);
+
+        s.MaxHp = row.GetInt("maxHp", 1);
+        s.Hp = row.GetInt("hp", s.MaxHp);
+
+        s.EnergyPoint = row.GetInt("ep", 100);
+
+        // sp 컬럼은 CP 로 승계한다. cp / maxCp 컬럼이 있으면 그쪽을 우선한다.
+        s.MaxCp = row.Has("maxCp") ? row.GetInt("maxCp", 200) : 200;
+        s.Cp = row.Has("cp") ? row.GetInt("cp") : 0;
+
+        s.Atk = row.GetInt("atk");
+        s.Def = row.GetInt("def");
+
+        // ats / adf 가 없으면 물리 스탯을 그대로 쓴다 (기존 CSV 하위 호환)
+        s.Ats = row.Has("ats") ? row.GetInt("ats") : s.Atk;
+        s.Adf = row.Has("adf") ? row.GetInt("adf") : s.Def;
+
+        s.Speed = row.GetInt("speed", 1);
+        s.Dex = row.Has("dex") ? row.GetInt("dex") : 20;
+        s.Agl = row.Has("agl") ? row.GetInt("agl") : 10;
+
+        s.Avoid = row.GetFloat("avoid");
+        s.Critical = row.GetFloat("cri");
+        s.CriticalDmg = row.Has("criDmg") ? row.GetFloat("criDmg", 0.5f) : 0.5f;
+        s.Hit = row.GetFloat("hit");
+
+        s.MaxBreak = row.GetInt("maxBreak");
+        s.Experience = row.GetInt("experience");
+
+        return s;
+    }
 }

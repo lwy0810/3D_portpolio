@@ -37,6 +37,12 @@ public class BattleManager : MonoBehaviour
     // 이번 행동에 쓰인 BaseDelay. 턴이 끝날 때 큐에 넣는 값이다
     private int _lastActionBaseDelay = AT.BaseAttack;
 
+    [Header("애니메이션 상태 이름")]
+    [Tooltip("Animator 에 IsRun 같은 파라미터가 없을 때 이 상태를 직접 재생한다")]
+    [SerializeField] private string _runStateName = "RunForward";
+    [Tooltip("Animator 에 Attack 트리거가 없을 때 이 상태를 직접 재생한다")]
+    [SerializeField] private string _attackStateName = "Attack1";
+
 
     public static BattleManager BattleInstance;
 
@@ -330,8 +336,19 @@ public class BattleManager : MonoBehaviour
             _camera = Camera.main;
 
             IsBattle = true;
-            Battle();
+
+            // GameManager 도 같은 sceneLoaded 를 구독한다. 어느 쪽이 먼저 호출되는지는
+            // Awake 순서에 달려 있어서, BattleManager 가 먼저 돌면 GameManager 가
+            // 유닛을 만들기 전의 목록을 복사하게 된다.
+            // 한 프레임 미루면 순서에 상관없이 완성된 목록을 본다.
+            StartCoroutine(BeginBattleNextFrame());
         }
+    }
+
+    private IEnumerator BeginBattleNextFrame()
+    {
+        yield return null;
+        Battle();
     }
 
     // 3. 배틀 씬에서 마우스 입력에 따라 카메라 위치 및 회전 변경
@@ -514,9 +531,10 @@ public class BattleManager : MonoBehaviour
         switch (_commandState)
         {
             case CommandState.Select:
-                if (Monsters.Count > 0)
+                int _selCount = SafeMonsterCount();
+                if (_selCount > 0)
                 {
-                    Monsters[Mathf.Clamp(nextIndex, 0, Monsters.Count - 1)].TargetAreaUnShow();
+                    Monsters[Mathf.Clamp(nextIndex, 0, _selCount - 1)].TargetAreaUnShow();
                 }
                 break;
 
@@ -804,8 +822,17 @@ public class BattleManager : MonoBehaviour
 
         Vector3 StartPos = _attacker.transform.position;
 
+        // 몬스터는 Quaternion.Euler(0,180,0) 으로 생성되므로 끝에 identity 로 되돌리면
+        // 캐릭터를 등지게 된다. 시작 회전을 그대로 복원한다.
+        Quaternion StartRot = _attacker.transform.rotation;
+
         CharacterController _controller = _attacker.GetComponent<CharacterController>();
         Animator _animator = _attacker.GetComponent<Animator>();
+
+        // 파라미터(IsRun 등)가 있으면 그것을 쓰고, 없으면 상태 이름으로 직접 재생한다.
+        // 몬스터 컨트롤러는 파라미터 없이 상태만 있는 경우가 많다.
+        bool _useParams = HasAnimParam(_animator, "IsRun");
+        int _idleStateHash = CurrentStateHash(_animator);
 
         const float moveSpeedUnits = 5.0f;
         const float arriveThreshold = 0.1f;
@@ -817,6 +844,11 @@ public class BattleManager : MonoBehaviour
         _approachDir.y = 0f;
         if (_approachDir.sqrMagnitude < 0.0001f) _approachDir = Vector3.back;
         _approachDir = _approachDir.normalized;
+
+        // 달리기 재생은 루프 진입 전에 한 번만 한다.
+        // 매 프레임 CrossFade 를 부르면 전환이 계속 다시 시작되어 목적 상태의
+        // 시간이 0 에서 멈춘 채 포즈가 굳는다 (제자리에서 미끄러지는 것처럼 보임).
+        PlayRun(_animator, _useParams, moveSpeedUnits);
 
         // 대상 앞까지 이동 (거리에 관계없이 목표 지점에 정확히 도달) (TC 118, 120)
         float elapsed = 0f;
@@ -833,10 +865,6 @@ public class BattleManager : MonoBehaviour
                 break;
             }
 
-            AnimBool(_animator, "IsWalk", false);
-            AnimBool(_animator, "IsRun", true);
-            AnimFloat(_animator, "moveSpeed", moveSpeedUnits);
-
             Vector3 dir = toTarget.normalized;
             MoveUnit(_attacker, _controller, dir * moveSpeedUnits * Time.deltaTime);
             _attacker.transform.rotation = Quaternion.LookRotation(dir);
@@ -845,9 +873,7 @@ public class BattleManager : MonoBehaviour
             yield return null;
         }
 
-        AnimBool(_animator, "IsWalk", false);
-        AnimBool(_animator, "IsRun", false);
-        AnimFloat(_animator, "moveSpeed", 0.0f);
+        StopRun(_animator, _useParams, _idleStateHash);
 
         yield return new WaitForSeconds(0.2f);
 
@@ -861,11 +887,15 @@ public class BattleManager : MonoBehaviour
             _attacker.transform.rotation = Quaternion.LookRotation(_lookDir.normalized);
         }
 
-        AnimTrigger(_animator, "Attack");
+        // 공격. 트리거가 없으면 Attack1 같은 상태를 직접 재생한다
+        if (HasAnimParam(_animator, "Attack")) _animator.SetTrigger("Attack");
+        else TryCrossFade(_animator, _attackStateName, 0.05f);
 
         yield return new WaitForSeconds(1.5f);
 
         // 원위치로 복귀
+        PlayRun(_animator, _useParams, moveSpeedUnits);
+
         elapsed = 0f;
         while (elapsed < maxSeconds)
         {
@@ -877,10 +907,6 @@ public class BattleManager : MonoBehaviour
                 break;
             }
 
-            AnimBool(_animator, "IsWalk", false);
-            AnimBool(_animator, "IsRun", true);
-            AnimFloat(_animator, "moveSpeed", moveSpeedUnits);
-
             Vector3 dir = toStart.normalized;
             _attacker.transform.rotation = Quaternion.LookRotation(dir);
             MoveUnit(_attacker, _controller, dir * moveSpeedUnits * Time.deltaTime);
@@ -891,11 +917,10 @@ public class BattleManager : MonoBehaviour
 
         yield return new WaitForSeconds(0.1f);
 
-        _attacker.transform.rotation = Quaternion.identity;
+        // 원래 보고 있던 방향으로 되돌린다. 몬스터는 이때 캐릭터를 마주보게 된다
+        _attacker.transform.rotation = StartRot;
 
-        AnimBool(_animator, "IsWalk", false);
-        AnimBool(_animator, "IsRun", false);
-        AnimFloat(_animator, "moveSpeed", 0.0f);
+        StopRun(_animator, _useParams, _idleStateHash);
 
         // 데미지 판정. 공격자가 몬스터인지에 따라 방향만 다르고 공식은 같다
         if (_attacker is Monster _atkMonster && _defender is Character _defCharacter)
@@ -960,12 +985,129 @@ public class BattleManager : MonoBehaviour
         if (HasAnimParam(_animator, _name)) _animator.SetTrigger(_name);
     }
 
+    /// <summary>현재 재생 중인 상태. 연출이 끝나면 이 상태로 되돌린다.</summary>
+    private static int CurrentStateHash(Animator _animator)
+    {
+        if (_animator == null) return 0;
+        return _animator.GetCurrentAnimatorStateInfo(0).shortNameHash;
+    }
+
+    /// <summary>이름이 같은 상태가 있으면 그것으로 전환한다. 없으면 아무것도 하지 않는다.</summary>
+    private static bool TryCrossFade(Animator _animator, string _stateName, float _duration)
+    {
+        if (_animator == null || string.IsNullOrEmpty(_stateName)) return false;
+
+        int _hash = Animator.StringToHash(_stateName);
+        if (!_animator.HasState(0, _hash)) return false;
+
+        _animator.CrossFade(_hash, _duration);
+        return true;
+    }
+
+    private void PlayRun(Animator _animator, bool _useParams, float _moveSpeed)
+    {
+        if (_useParams)
+        {
+            AnimBool(_animator, "IsWalk", false);
+            AnimBool(_animator, "IsRun", true);
+            AnimFloat(_animator, "moveSpeed", _moveSpeed);
+            return;
+        }
+
+        if (_animator == null) return;
+
+        int _hash = Animator.StringToHash(_runStateName);
+        if (!_animator.HasState(0, _hash)) return;
+
+        // 이미 그 상태거나 그 상태로 전환 중이면 다시 부르지 않는다
+        if (_animator.GetCurrentAnimatorStateInfo(0).shortNameHash == _hash) return;
+
+        if (_animator.IsInTransition(0) &&
+            _animator.GetNextAnimatorStateInfo(0).shortNameHash == _hash) return;
+
+        _animator.CrossFade(_hash, 0.1f);
+
+        StartCoroutine(WarnIfStateHasNoClip(_animator, _runStateName));
+    }
+
+    /// <summary>
+    /// 상태는 바뀌었는데 클립이 비어 있으면 포즈가 그대로 굳는다.
+    /// Idle 상태의 Motion 슬롯이 비어 있어 캐릭터가 솟았던 것과 같은 종류다.
+    /// </summary>
+    private static readonly HashSet<string> _warnedEmptyStates = new HashSet<string>();
+
+    private IEnumerator WarnIfStateHasNoClip(Animator _animator, string _stateName)
+    {
+        yield return null;   // 전환이 시작될 시간을 준다
+
+        if (_animator == null || _warnedEmptyStates.Contains(_stateName)) yield break;
+
+        if (_animator.GetCurrentAnimatorClipInfoCount(0) == 0 &&
+            _animator.GetNextAnimatorClipInfoCount(0) == 0)
+        {
+            _warnedEmptyStates.Add(_stateName);
+            Debug.LogWarning($"[BattleManager] '{_stateName}' 상태에 클립이 없습니다. " +
+                             "Animator 에서 이 상태의 Motion 슬롯을 확인하세요. " +
+                             "상태는 전환되지만 포즈가 움직이지 않습니다.");
+        }
+    }
+
+    private void StopRun(Animator _animator, bool _useParams, int _idleStateHash)
+    {
+        if (_useParams)
+        {
+            AnimBool(_animator, "IsWalk", false);
+            AnimBool(_animator, "IsRun", false);
+            AnimFloat(_animator, "moveSpeed", 0.0f);
+            return;
+        }
+
+        if (_animator != null && _idleStateHash != 0) _animator.CrossFade(_idleStateHash, 0.12f);
+    }
+
+    /// <summary>
+    /// 타깃 인덱스로 안전하게 쓸 수 있는 몬스터 수.
+    ///
+    /// TargetView 는 BattleManager.Monsters 를, TargetViewPosSet 은
+    /// GameManager.Monsters 를 같은 인덱스로 참조한다. 두 목록의 길이가
+    /// 어긋나면 짧은 쪽에서 ArgumentOutOfRangeException 이 난다.
+    /// 그래서 항상 짧은 쪽을 기준으로 삼는다.
+    /// </summary>
+    private int SafeMonsterCount()
+    {
+        PruneMonsters();
+
+        int _mine = Monsters.Count;
+        int _shared = GameManager.GameInstance.Monsters != null
+                      ? GameManager.GameInstance.Monsters.Count : 0;
+
+        return Mathf.Min(_mine, _shared);
+    }
+
+    /// <summary>파괴된 몬스터가 목록에 남아 있으면 걷어낸다.</summary>
+    private void PruneMonsters()
+    {
+        for (int i = Monsters.Count - 1; i >= 0; i--)
+        {
+            if (Monsters[i] == null) Monsters.RemoveAt(i);
+        }
+
+        List<GameObject> _shared = GameManager.GameInstance.Monsters;
+        if (_shared == null) return;
+
+        for (int i = _shared.Count - 1; i >= 0; i--)
+        {
+            if (_shared[i] == null) _shared.RemoveAt(i);
+        }
+    }
+
     void TargetMove()
     {
-        if (Monsters.Count == 0) return;
+        int _count = SafeMonsterCount();
+        if (_count == 0) return;
 
-        oriIndex = Mathf.Clamp(oriIndex, 0, Monsters.Count - 1);
-        nextIndex = Mathf.Clamp(nextIndex, 0, Monsters.Count - 1);
+        oriIndex = Mathf.Clamp(oriIndex, 0, _count - 1);
+        nextIndex = Mathf.Clamp(nextIndex, 0, _count - 1);
 
         float scroll = Input.GetAxis("Mouse ScrollWheel");
 
@@ -976,12 +1118,12 @@ public class BattleManager : MonoBehaviour
             if (scroll < 0.0f)
             {
                 nextIndex = oriIndex - 1;
-                if (nextIndex < 0) { nextIndex = Monsters.Count - 1; }
+                if (nextIndex < 0) { nextIndex = _count - 1; }
             }
             else if (scroll > 0.0f)
             {
                 nextIndex = oriIndex + 1;
-                if (nextIndex > Monsters.Count - 1) { nextIndex = 0; }
+                if (nextIndex > _count - 1) { nextIndex = 0; }
             }
 
             Monsters[oriIndex].TargetAreaUnShow();

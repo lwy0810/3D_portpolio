@@ -1,28 +1,30 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class CSVFileLoader : MonoBehaviour
 {
-    public static string OnCharacterLoadCSV(string fileName)
-    {
-        string filePath = "Status/";
-        filePath = string.Concat(filePath, fileName);
+    private const string Folder = "Status/";
 
-        TextAsset text = Resources.Load<TextAsset>(filePath);
+    /// <summary>Resources/Status/{fileName}.csv 를 문자열로 읽는다.</summary>
+    public static string Load(string fileName)
+    {
+        TextAsset text = Resources.Load<TextAsset>(Folder + fileName);
+
+        if (text == null)
+        {
+            Debug.LogError($"[CSVFileLoader] Resources/{Folder}{fileName} 을 찾을 수 없습니다.");
+            return string.Empty;
+        }
 
         return text.text;
     }
 
-    public static string OnMonsterLoadCSV(string fileName)
+    /// <summary>헤더 이름으로 접근하는 표로 읽는다.</summary>
+    public static CsvTable LoadTable(string fileName)
     {
-        string filePath = "Status/";
-        filePath = string.Concat(filePath, fileName);
-
-        TextAsset text = Resources.Load<TextAsset>(filePath);
-
-        return text.text;
+        return CsvTable.Parse(Load(fileName));
     }
 
-
+    // ── 기존 호출부 호환용 ────────────────────────────────────
+    public static string OnCharacterLoadCSV(string fileName) => Load(fileName);
+    public static string OnMonsterLoadCSV(string fileName) => Load(fileName);
 }

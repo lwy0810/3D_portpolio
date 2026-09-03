@@ -1,4 +1,4 @@
-index,name,owner,type,element,power,costType,cost,castDelay,baseDelay,targetSide,targetShape,range,area,breakMult,unbalance,effectIds,animTrigger,description
+﻿index,name,owner,type,element,power,costType,cost,castDelay,baseDelay,targetSide,targetShape,range,area,breakMult,unbalance,effectIds,animTrigger,description
 1,이동,all,move,none,0,none,0,0,10,self,single,0,0,0,0,,,이동. BaseDelay 10
 2,통상공격,all,attack,none,100,none,0,0,20,enemy,single,2.5,0,1,0,,Attack,기본 공격. BaseDelay 20
 3,아이템,all,item,none,0,none,0,0,10,ally,single,3,0,0,0,,,아이템 사용. BaseDelay 10

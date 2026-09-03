@@ -1,4 +1,4 @@
-index,effectType,statName,valueType,value,duration,chance,description
+﻿index,effectType,statName,valueType,value,duration,chance,description
 511,debuff,Def,percent,-25,3,0.6,방어력 25% 감소 3턴
 512,debuff,Speed,percent,-20,3,0.5,속도 20% 감소 3턴
 513,buff,Def,percent,30,2,1,방어력 30% 상승 2턴

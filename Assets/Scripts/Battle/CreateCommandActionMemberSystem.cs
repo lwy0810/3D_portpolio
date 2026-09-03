@@ -109,12 +109,42 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
 
     public void RemoveFirst()
     {
-        if (_actionMemberlist.Count == 0) return;
+        GameObject slot = DetachFirst();
+        if (slot != null) Destroy(slot);
+    }
 
-        if (_actionMemberlist[0] != null) Destroy(_actionMemberlist[0]);
+    /// <summary>
+    /// 선두 슬롯을 목록에서만 빼고 오브젝트는 돌려준다.
+    /// 호출자가 페이드아웃을 붙인 뒤 직접 파괴할 수 있다.
+    /// </summary>
+    public GameObject DetachFirst()
+    {
+        if (_actionMemberlist.Count == 0) return null;
+
+        GameObject slot = _actionMemberlist[0];
         _actionMemberlist.RemoveAt(0);
 
         if (_characterNames.Count > 0) _characterNames.RemoveAt(0);
+
+        return slot;
+    }
+
+    /// <summary>
+    /// 이미 만들어진 슬롯을 목록 중간에 끼워 넣는다.
+    /// 예상 위치 슬롯(ProjectedSlot)을 실제 슬롯으로 승격시킬 때 쓴다.
+    /// </summary>
+    public void InsertSlot(int index, GameObject slot, string unitName)
+    {
+        if (slot == null) return;
+
+        index = Mathf.Clamp(index, 0, _actionMemberlist.Count);
+
+        _actionMemberlist.Insert(index, slot);
+
+        int nameIndex = Mathf.Clamp(index, 0, _characterNames.Count);
+        _characterNames.Insert(nameIndex, unitName);
+
+        CaptureBasePosition(slot);
     }
 
     public void ClearAll()
@@ -133,6 +163,15 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
     /// </summary>
     public void Reposition()
     {
+        Reposition(true);
+    }
+
+    /// <summary>
+    /// applyPosition 이 false 면 순서와 크기만 맞추고 좌표는 건드리지 않는다.
+    /// ActionBar 가 좌표를 부드럽게 옮기는 동안 튀지 않게 하려는 것이다.
+    /// </summary>
+    public void Reposition(bool applyPosition)
+    {
         int row = 0;
 
         for (int i = 0; i < _actionMemberlist.Count; i++)
@@ -143,13 +182,17 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
             RectTransform rt = slot.GetComponent<RectTransform>();
             if (rt == null) continue;
 
-            rt.anchoredPosition = _basePos + new Vector2(_slotOffsetX, -row * _slotHeight);
+            if (applyPosition)
+                rt.anchoredPosition = _basePos + new Vector2(_slotOffsetX, -row * _slotHeight);
+
             rt.localScale = Vector3.one * (row == 0 ? _currentScale : 1f);
             rt.SetSiblingIndex(row);
 
             row++;
         }
     }
+
+    public float CurrentScale => _currentScale;
 
     /// <summary>프리팹이 들고 있던 원래 위치를 기준점으로 삼는다. 바 위치가 밀리지 않는다.</summary>
     private void CaptureBasePosition(GameObject slot)

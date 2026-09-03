@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,6 +28,9 @@ public class BattleManager : MonoBehaviour
 
     [SerializeField] private Transform _commandBattlePos;
 
+    // 액션 바. 비워두면 Battle() 에서 _commandActionPos 에서 찾는다
+    [SerializeField] private ActionBar _actionBar;
+
 
     public static BattleManager BattleInstance;
 
@@ -49,6 +52,9 @@ public class BattleManager : MonoBehaviour
     private int oriIndex = 0;
     private int nextIndex = 0;
     private int attackIndex = 0;
+
+    // 스킬 커맨드에서 고른 스킬. null 이면 통상공격(BaseDelay 20)
+    private SkillData _pendingSkill;
 
     private Camera _camera;
     public List<Monster> Monsters = new List<Monster>();
@@ -169,6 +175,8 @@ public class BattleManager : MonoBehaviour
             _commandBattlePos = _memberBarObj.transform;
         }
 
+        EnsureActionBar();
+
         _isBattleOver = false;
         IsAttack = false;
         TurnOff = false;
@@ -188,11 +196,9 @@ public class BattleManager : MonoBehaviour
         _battleUnit = _sortUnit;
 
         // 3. 전투 유닛 순서대로 액션 멤버 생성
-        List<GameObject> _actionMemberlist = _createCommandActionMemberSystem.ActionMemberlist;
-        if (_actionMemberlist.Count > 0)
-        {
-            _actionMemberlist.Clear();
-        }
+        //    목록만 Clear() 하면 GameObject 가 남아 전투를 반복할 때마다 쌓인다.
+        //    CreateCommandActionMember 가 시작할 때 ClearAll() 로 파괴까지 처리한다.
+        _pendingSkill = null;
 
         StartCoroutine(_createCommandActionMemberSystem.CreateCommandActionMember(
             _sortUnit, _commandActionPos));
@@ -419,6 +425,8 @@ public class BattleManager : MonoBehaviour
 
     private void ApplyCommandStateViews(CommandState state)
     {
+        UpdateDelayPreview(state);
+
         switch (state)
         {
             case CommandState.Select:
@@ -840,9 +848,19 @@ public class BattleManager : MonoBehaviour
         GameManager.GameInstance.Units = _sorted;
         _battleUnit = _sorted;
 
-        TurnOff = true;
-        _createCommandActionMemberSystem.CommandActionMemberAdd(_sorted[_sorted.Count - 1], _commandActionPos);
-        TurnOff = false;
+        // 액션 바 갱신. 선두 슬롯(방금 행동한 캐릭터)은 여기서 사라지고,
+        // 커맨드 선택 때 미리 만들어 둔 예상 슬롯이 실제 슬롯으로 승격된다.
+        if (_actionBar != null)
+        {
+            _actionBar.CommitTurn(_living.Contains(_actedUnit) ? _actedUnit : null);
+        }
+        else
+        {
+            TurnOff = true;
+            _createCommandActionMemberSystem.CommandActionMemberAdd(
+                _sorted[_sorted.Count - 1], _commandActionPos);
+            TurnOff = false;
+        }
 
         attackIndex = 0;
 
@@ -853,6 +871,110 @@ public class BattleManager : MonoBehaviour
         if (_nextUnit is Monster _monster)
         {
             StartCoroutine(MonsterTurnRoutine(_monster));
+        }
+    }
+
+    // ── 딜레이 프리뷰 ───────────────────────────────────────
+
+    /// <summary>
+    /// 타깃 지정·스킬 선택 중에는 이번 행동으로 붙는 딜레이를 액션 바에 띄운다.
+    ///     Final Delay = floor(100 * BaseDelay / SPD)
+    /// 상태가 바뀔 때만 호출되므로 매 프레임 갱신되지 않는다.
+    /// </summary>
+    /// <summary>
+    /// 액션 바 컴포넌트를 확보한다. 씬에 붙어 있지 않으면 직접 붙인다.
+    /// 예전에는 null 이면 조용히 리턴해서 딜레이 표시가 안 되는 이유를 알 수 없었다.
+    /// </summary>
+    private void EnsureActionBar()
+    {
+        if (_actionBar != null)
+        {
+            _actionBar.Bind(_commandActionPos, _createCommandActionMemberSystem);
+            return;
+        }
+
+        if (_commandActionPos == null)
+        {
+            Debug.LogError("BattleManager : _commandActionPos 가 없어 ActionBar 를 확보할 수 없습니다.");
+            return;
+        }
+
+        _actionBar = _commandActionPos.GetComponent<ActionBar>();
+
+        if (_actionBar == null)
+        {
+            _actionBar = _commandActionPos.GetComponentInChildren<ActionBar>(true);
+        }
+
+        if (_actionBar == null)
+        {
+            _actionBar = _commandActionPos.gameObject.AddComponent<ActionBar>();
+            Debug.Log($"BattleManager : '{_commandActionPos.name}' 오브젝트에 ActionBar 컴포넌트가 없어 " +
+                      "런타임에 추가했습니다. 씬에 미리 붙여두면 인스펙터에서 값을 조절할 수 있습니다.");
+        }
+        else
+        {
+            Debug.Log($"BattleManager : ActionBar 확보 — {_actionBar.gameObject.name}");
+        }
+
+        _actionBar.Bind(_commandActionPos, _createCommandActionMemberSystem);
+    }
+
+    private void UpdateDelayPreview(CommandState state)
+    {
+        if (_actionBar == null) EnsureActionBar();
+        if (_actionBar == null) return;
+
+        switch (state)
+        {
+            case CommandState.Targeting:
+            case CommandState.Skill:
+                Unit _actor = CurrentActor();
+                int _baseDelay = PendingBaseDelay();
+
+                Debug.Log($"BattleManager : 딜레이 표시 요청 — state={state}, " +
+                          $"actor={(_actor != null ? _actor.Stat.Name : "null")}, baseDelay={_baseDelay}");
+
+                _actionBar.ShowDelayPreview(_actor, _baseDelay);
+                break;
+
+            case CommandState.Attack:
+                // 공격 연출 중에는 배지만 감춘다. 예상 슬롯은 다음 턴에
+                // 그대로 실제 슬롯이 되어야 하므로 남겨둔다
+                _actionBar.LockPreview();
+                break;
+
+            default:
+                // 취소해서 커맨드 선택으로 돌아온 경우 예상 슬롯을 없앤다
+                _actionBar.ClearPreview();
+                break;
+        }
+    }
+
+    /// <summary>지금 차례인 유닛. 정렬된 목록의 선두다.</summary>
+    private Unit CurrentActor()
+    {
+        List<Unit> _units = GameManager.GameInstance.Units;
+        if (_units == null || _units.Count == 0) return null;
+
+        return _units[0];
+    }
+
+    /// <summary>이번 행동의 BaseDelay. 통상공격 20, 스킬은 SkillData.csv 값.</summary>
+    private int PendingBaseDelay()
+    {
+        return _pendingSkill != null ? _pendingSkill.BaseDelay : AT.BaseAttack;
+    }
+
+    /// <summary>스킬 선택 UI 가 고른 스킬을 넘긴다. null 이면 통상공격으로 되돌린다.</summary>
+    public void SetPendingSkill(SkillData skill)
+    {
+        _pendingSkill = skill;
+
+        if (_actionBar != null && (_commandState == CommandState.Targeting ||
+                                   _commandState == CommandState.Skill))
+        {
+            _actionBar.ShowDelayPreview(CurrentActor(), PendingBaseDelay());
         }
     }
 

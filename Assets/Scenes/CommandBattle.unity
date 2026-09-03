@@ -2600,6 +2600,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fc626d44fcb67b54891265df1019058e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _factory: {fileID: 0}
+  _visibleCount: 12
+  _badgePosX: 250
+  _badgeFontSize: 20
+  _badgeColor: {r: 1, g: 0.78, b: 0.28, a: 1}
+  _showProjectedSlot: 1
 --- !u!1 &748835094
 GameObject:
   m_ObjectHideFlags: 0
@@ -3094,6 +3100,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7460a05866c40124e8d9827bf1883c8b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _skillButtonPrefab: {fileID: 0}
+  _listRoot: {fileID: 0}
+  _descriptionText: {fileID: 0}
+  _showCrafts: 1
+  _showArts: 0
 --- !u!1 &874928795
 GameObject:
   m_ObjectHideFlags: 0
@@ -8016,6 +8027,7 @@ MonoBehaviour:
   _commandBattleMemberPrefab: {fileID: 8331331960300559184, guid: 24dd7229047f4e340a6d2f798fadeb27, type: 3}
   _commandActionPos: {fileID: 1386647207}
   _commandBattlePos: {fileID: 608553167}
+  _actionBar: {fileID: 740830486}
   Monsters: []
   Characters: []
   _battleMemberList: []
@@ -8063,10 +8075,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3cc305d0406ee4c43bc6781296c0e746, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _memberImage: {fileID: 0}
-  _background: {fileID: 0}
   _commandActionMemberPrefab: {fileID: 6154485123753671486, guid: 8b87c458f4f2f4640beaf630bbcf04e3, type: 3}
-  _characterNames: []
+  _slotHeight: 70
+  _slotOffsetX: 90
+  _currentScale: 1.12
 --- !u!1 &2142651191
 GameObject:
   m_ObjectHideFlags: 0

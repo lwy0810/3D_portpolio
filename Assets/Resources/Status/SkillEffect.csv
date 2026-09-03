@@ -1,2 +1,12 @@
-index,name,category,element,lv,hp,maxHp,ep,sp,atk,def,speed,avoid,cri,experience
-1,Bear,monster,water,1,1000,1000,100,100,30,40,30,0,0,1000
+index,effectType,statName,valueType,value,duration,chance,description
+511,debuff,Def,percent,-25,3,0.6,방어력 25% 감소 3턴
+512,debuff,Speed,percent,-20,3,0.5,속도 20% 감소 3턴
+513,buff,Def,percent,30,2,1,방어력 30% 상승 2턴
+514,buff,Speed,percent,25,3,1,속도 25% 상승 3턴
+515,buff,Atk,percent,20,3,1,공격력 20% 상승 3턴
+516,buff,Ats,percent,20,3,1,아츠 공격력 20% 상승 3턴
+521,ailment,Stun,flat,0,1,0.4,기절 1턴
+522,ailment,Freeze,flat,0,2,0.35,동결 2턴
+523,ailment,Poison,percent,-5,4,0.5,매 턴 최대 체력 5% 피해
+524,ailment,Seal,flat,0,2,0.3,아츠 봉인 2턴
+531,atDelay,,flat,10,0,1,대상에게 BaseDelay 10 추가 딜레이

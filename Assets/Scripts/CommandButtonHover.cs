@@ -25,33 +25,33 @@ public class CommandButtonHover : MonoBehaviour, IPointerClickHandler
     {
         string buttonText = _tmpText.text.ToString();
 
-        Debug.Log($"buttonText = {buttonText}");
-
+        // 예전에는 여기서 BattleManager.CommandAttack 같은 죽은 bool 플래그만 세팅하고
+        // 실제 커맨드 상태머신(BattleManager._commandState)은 건드리지 않았다.
+        // 그래서 버튼을 눌러도 실제 공격/스킬/도구 진입이 되지 않았다. 이제는 BattleManager의
+        // 공개 진입점(EnterTargeting/EnterSkill/EnterInstrument/Retreat)을 그대로 호출해서
+        // 마우스 좌클릭/키보드 입력과 동일한 상태 전환 경로를 타게 한다.
         ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.actionBar, false);
         ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.commandArea, false);
         ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.commandMemberBar, false);
 
         if (buttonText == "attack")
         {
-            BattleManager.BattleInstance.CommandAttack = true;
-            BattleManager.BattleInstance.CommandSelect = false;
-            GameManager.GameInstance.Monsters[0].GetComponent<Monster>().TargetAreaShow();
-            ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.targetView, true);
+            BattleManager.BattleInstance.EnterTargeting();
         }
 
         if (buttonText == "skill")
         {
-            ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.skillSelectView, true);
+            BattleManager.BattleInstance.EnterSkill();
         }
 
         if (buttonText == "instrument")
         {
-            ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.instrumentSelectView, true);
+            BattleManager.BattleInstance.EnterInstrument();
         }
 
         if (buttonText == "retreat")
         {
-            SceneManager.LoadScene(1);
+            BattleManager.BattleInstance.Retreat();
         }
     }
 

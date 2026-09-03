@@ -1,204 +1,240 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
-using static UnityEngine.UI.CanvasScaler;
 
+/// <summary>
+/// 액션 바 슬롯의 생성 · 제거 · 배치만 담당한다. 턴 순서 판단은 하지 않는다.
+///
+/// 기존 구현은 슬롯을 추가할 때 localPosition 을 CreateCommandActionMember 코루틴
+/// 안에서만 계산했다. 그래서 턴이 끝나 CommandActionMemberAdd 로 추가된 슬롯은
+/// 위치가 그대로 남아 바에 나타나지 않았다. 이제 목록이 바뀔 때마다
+/// Reposition() 이 전체를 다시 배치한다.
+/// </summary>
 public class CreateCommandActionMemberSystem : MonoBehaviour
 {
-    [SerializeField] private Image _memberImage;
-    [SerializeField] private Image _background;
     [SerializeField] private GameObject _commandActionMemberPrefab;
 
-    private List<GameObject> _actionMemberlist = new List<GameObject>();
-    public List<string> _characterNames = new List<string>();
+    [Header("배치")]
+    [Tooltip("슬롯 사이 세로 간격")]
+    [SerializeField] private float _slotHeight = 70f;
+    [Tooltip("바 기준 가로 오프셋")]
+    [SerializeField] private float _slotOffsetX = 90f;
+    [Tooltip("현재 차례 슬롯 확대 배율")]
+    [SerializeField] private float _currentScale = 1.12f;
 
-    public List<GameObject> ActionMemberlist { get => _actionMemberlist; }
+    private readonly List<GameObject> _actionMemberlist = new List<GameObject>();
+    private readonly List<string> _characterNames = new List<string>();
 
-    public List<string> CharacterNames { get => _characterNames; }
+    private Vector2 _basePos;
+    private bool _baseCaptured;
 
-    private Color[] _colorType = new Color[]
-    {
-        Color.red,
-        Color.green,
-        Color.blue,
-    };
+    public List<GameObject> ActionMemberlist => _actionMemberlist;
+    public List<string> CharacterNames => _characterNames;
 
+    public float SlotHeight => _slotHeight;
+    public float SlotOffsetX => _slotOffsetX;
+    public GameObject Prefab => _commandActionMemberPrefab;
 
-    // Start is called before the first frame update
-    void Start()
-    {
-        //UnitCollect();
-    }
+    // ── 생성 ────────────────────────────────────────────────
 
-    // Update is called once per frame
-    void Update()
-    {
-
-    }
-
+    /// <summary>전투 개시 연출. 순서대로 하나씩 나타난다.</summary>
     public IEnumerator CreateCommandActionMember(List<Unit> _units, Transform _actionMemberBarTransform)
     {
-        for(int i = 0; i < _units.Count; i++)
-        {
-            Debug.Log($"Test {i} : {_units[i]}");
-        }
+        ClearAll();
 
-
-        //for (int i = 0; i < _sortUnit.Count; i++)
-        //{
-        //    //Debug.Log($"{i} = {_sortUnit[i]}");www
-        //    CommandActionMemberAdd(_sortUnit[i], _actionMember, _actionMemberBarTransform);
-        //    yield return new WaitForSeconds(0.1f);
-        //    ActionMemberPositionUp(_actionMemberlist[i], i);
-        //    yield return new WaitForSeconds(0.2f);
-        //}
         for (int i = 0; i < _units.Count; i++)
         {
-            CommandActionMemberAdd(_units[i], _actionMemberBarTransform);
-            StartCoroutine(FadeIn(_actionMemberlist[i]));
-            _actionMemberlist[i].GetComponent<RectTransform>().localPosition += new Vector3(90f, i * -70f, 0f);
-            _actionMemberlist[i].GetComponent<RectTransform>().localScale = new Vector3(1.0f, 1.0f, 0.8f);
-            StartCoroutine(ActionMemberPositionUp(_actionMemberlist[i]));
+            if (_units[i] == null || _units[i].Stat == null) continue;
+
+            GameObject slot = CreateSlot(_units[i], _actionMemberBarTransform);
+            if (slot == null) continue;
+
+            Reposition();
+            StartCoroutine(FadeIn(slot));
             yield return new WaitForSeconds(0.15f);
-        }   
-    }
-
-
-    public void CommandActionMemberAdd(Unit _unit, Transform _actionMemberBarTransform)
-    {
-        if (BattleManager.BattleInstance.TurnOff == true)
-        {
-            //FadeOut(_actionMemberlist[0]);
-            Destroy(_actionMemberlist[0]);
-            _actionMemberlist.RemoveAt(0);
-            _characterNames.RemoveAt(0);
         }
 
-        Debug.Log($"_unit = {_unit}");
-        //GameObject actionMember = Instantiate(_actionMember, _actionMemberBarTransform);
-        GameObject actionMember = Instantiate(_commandActionMemberPrefab, _actionMemberBarTransform);
-
-        actionMember.name = _unit.Stat.Name;
-
-        _characterNames.Add(_unit.Stat.Name);
-        _actionMemberlist.Add(actionMember);
-
-        ImageReset(_unit, actionMember);
-        _actionMemberlist[0].GetComponent<RectTransform>().localScale = new Vector3(1.0f, 1.0f, 0.8f);
+        Reposition();
     }
 
-
-    public void CommandActionMemberRemove(Unit _units)
+    /// <summary>
+    /// 턴이 끝났을 때 선두를 빼고 뒤에 다시 넣는다.
+    /// removeFirst 를 false 로 주면 제거 없이 추가만 한다.
+    /// </summary>
+    public GameObject CommandActionMemberAdd(Unit _unit, Transform _actionMemberBarTransform,
+                                             bool removeFirst = true)
     {
+        if (removeFirst) RemoveFirst();
 
+        GameObject slot = CreateSlot(_unit, _actionMemberBarTransform);
+
+        Reposition();                 // 기존에 빠져 있던 단계
+        if (slot != null) StartCoroutine(FadeIn(slot));
+
+        return slot;
     }
 
-    private void ImageReset(Unit _unit, GameObject _actionMember)
+    /// <summary>슬롯 1개 생성. 위치는 잡지 않는다 (Reposition 이 담당).</summary>
+    public GameObject CreateSlot(Unit _unit, Transform _parent)
     {
-        //Debug.Log(_unit);
-        string filePath = null;
-        filePath = $"Image/{_unit.Stat.Name}_head";
-        //Debug.Log(filePath);
-
-        Sprite sprite = Resources.Load<Sprite>(filePath);
-        //Debug.Log(sprite);
-        Image[] images = _actionMember.GetComponentsInChildren<Image>();
-
-        foreach (var img in images)
+        if (_commandActionMemberPrefab == null)
         {
-            if (img.name == "MemberImage")
+            Debug.LogError("[ActionMember] _commandActionMemberPrefab 이 비어 있습니다.");
+            return null;
+        }
+        if (_unit == null || _unit.Stat == null)
+        {
+            Debug.LogWarning("[ActionMember] Unit 또는 Stat 이 없어 슬롯을 만들지 않았습니다.");
+            return null;
+        }
+        if (_parent == null)
+        {
+            Debug.LogError("[ActionMember] 부모 Transform 이 없습니다. ActionBar 를 찾았는지 확인하세요.");
+            return null;
+        }
+
+        GameObject slot = Instantiate(_commandActionMemberPrefab, _parent);
+        slot.name = _unit.Stat.Name;
+
+        CaptureBasePosition(slot);
+
+        _actionMemberlist.Add(slot);
+        _characterNames.Add(_unit.Stat.Name);
+
+        ImageReset(_unit, slot);
+
+        return slot;
+    }
+
+    public void RemoveFirst()
+    {
+        if (_actionMemberlist.Count == 0) return;
+
+        if (_actionMemberlist[0] != null) Destroy(_actionMemberlist[0]);
+        _actionMemberlist.RemoveAt(0);
+
+        if (_characterNames.Count > 0) _characterNames.RemoveAt(0);
+    }
+
+    public void ClearAll()
+    {
+        for (int i = 0; i < _actionMemberlist.Count; i++)
+            if (_actionMemberlist[i] != null) Destroy(_actionMemberlist[i]);
+
+        _actionMemberlist.Clear();
+        _characterNames.Clear();
+    }
+
+    // ── 배치 ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 목록 순서대로 전체를 다시 배치한다. 슬롯이 추가 · 제거될 때마다 호출해야 한다.
+    /// </summary>
+    public void Reposition()
+    {
+        int row = 0;
+
+        for (int i = 0; i < _actionMemberlist.Count; i++)
+        {
+            GameObject slot = _actionMemberlist[i];
+            if (slot == null) continue;
+
+            RectTransform rt = slot.GetComponent<RectTransform>();
+            if (rt == null) continue;
+
+            rt.anchoredPosition = _basePos + new Vector2(_slotOffsetX, -row * _slotHeight);
+            rt.localScale = Vector3.one * (row == 0 ? _currentScale : 1f);
+            rt.SetSiblingIndex(row);
+
+            row++;
+        }
+    }
+
+    /// <summary>프리팹이 들고 있던 원래 위치를 기준점으로 삼는다. 바 위치가 밀리지 않는다.</summary>
+    private void CaptureBasePosition(GameObject slot)
+    {
+        if (_baseCaptured) return;
+
+        RectTransform rt = slot.GetComponent<RectTransform>();
+        if (rt == null) return;
+
+        _basePos = rt.anchoredPosition;
+        _baseCaptured = true;
+    }
+
+    /// <summary>슬롯 1개의 화면상 위치. 딜레이 배지를 붙일 때 쓴다.</summary>
+    public Vector2 SlotAnchoredPosition(int row)
+    {
+        return _basePos + new Vector2(_slotOffsetX, -row * _slotHeight);
+    }
+
+    // ── 초상화 · 속성색 ─────────────────────────────────────
+
+    public void ImageReset(Unit _unit, GameObject _actionMember)
+    {
+        string filePath = $"Image/{_unit.Stat.Name}_head";
+        Sprite sprite = Resources.Load<Sprite>(filePath);
+
+        if (sprite == null)
+            Debug.LogWarning($"[ActionMember] Resources/{filePath} 을 찾을 수 없습니다.");
+
+        Image[] images = _actionMember.GetComponentsInChildren<Image>(true);
+
+        for (int i = 0; i < images.Length; i++)
+        {
+            Image img = images[i];
+
+            if (img.name == "MemberImage" && sprite != null)
             {
                 img.sprite = sprite;
             }
-
-            if (img.name == "ElementBackground")
+            else if (img.name == "ElementBackground")
             {
-                if (_unit.Stat.Element == "fire")
-                {
-                    img.color = Color.red;
-                }
-                else if (_unit.Stat.Element == "wind")
-                {
-                    img.color = Color.green;
-                }
-                else if (_unit.Stat.Element == "water")
-                {
-                    img.color = Color.blue;
-                }
-
-                Color c = img.color;
-                c.a = 120 / 255f;
-                img.color = c;
+                img.color = ElementColor(_unit.Stat.Element);
             }
         }
     }
 
-    //public void ScaleUp(GameObject _actionMember)
-    //{
-    //    _actionMember.GetComponent<RectTransform>().localScale = new Vector3(1.0f, 1.0f, 0.8f);
-    //}
-
-
-    void FadeOut(GameObject _actionMember) 
+    /// <summary>속성별 배경색. 색만 담당하고 데미지 상성은 ElementChart 가 본다.</summary>
+    public static Color ElementColor(string element)
     {
-        float duration = 0.2f; // 페이드 아웃 지속 시간
-        float time = 0f;
+        Color c;
 
-        CanvasGroup _CanvasGroup = _actionMember.GetComponent<CanvasGroup>();
+        switch (element)
+        {
+            case "fire": c = Color.red; break;
+            case "wind": c = Color.green; break;
+            case "water": c = Color.blue; break;
+            case "earth": c = new Color(0.75f, 0.55f, 0.2f); break;
+            default: c = Color.gray; break;
+        }
+
+        c.a = 120 / 255f;
+        return c;
+    }
+
+    // ── 연출 ────────────────────────────────────────────────
+
+    private IEnumerator FadeIn(GameObject _actionMember)
+    {
+        if (_actionMember == null) yield break;
+
+        CanvasGroup cg = _actionMember.GetComponent<CanvasGroup>();
+        if (cg == null) cg = _actionMember.AddComponent<CanvasGroup>();
+
+        float duration = 0.2f;
+        float time = 0f;
 
         while (time < duration)
         {
+            if (_actionMember == null) yield break;
+
             time += Time.deltaTime;
-            float alpha = Mathf.Lerp(1f, 0f, time / duration);
-            _CanvasGroup.alpha = alpha;
-        }
-    }
-
-    IEnumerator FadeIn(GameObject _actionMember)
-    {
-        float duration = 0.2f; // 페이드 아웃 지속 시간
-        float time = 0f;
-
-        CanvasGroup _CanvasGroup = _actionMember.GetComponent<CanvasGroup>();
-
-        while (time < duration)
-        {
-            time += Time.deltaTime;
-            float alpha = Mathf.Lerp(0f, 1f, time / duration);
-            _CanvasGroup.alpha = alpha;
-
+            cg.alpha = Mathf.Lerp(0f, 1f, time / duration);
             yield return null;
         }
 
-        _CanvasGroup.alpha = 1f;
-
+        cg.alpha = 1f;
     }
-
-
-
-    IEnumerator ActionMemberPositionUp(GameObject _actionMember)
-    {
-        float time = 0.0f;
-        float duration = 2.0f;
-
-
-        while(time < duration)
-        {
-            time += Time.deltaTime;
-            float t = time / duration;
-            //_actionMember.GetComponent<RectTransform>().localPosition.y = Mathf.Lerp(t, 0f, t);
-            yield return null;
-        }  
-
-
-    }
-
-
-
-
 }

@@ -43,6 +43,20 @@ public class BattleManager : MonoBehaviour
     [Tooltip("Animator 에 Attack 트리거가 없을 때 이 상태를 직접 재생한다")]
     [SerializeField] private string _attackStateName = "Attack1";
 
+    [Header("전투 문자(데미지/회피) UI")]
+    [Tooltip("피격 지점 위에 문자가 떠 있는 시간(초)")]
+    [SerializeField] private float _combatTextDuration = 1.0f;
+    [Tooltip("표시되는 동안 위로 떠오르는 거리(m)")]
+    [SerializeField] private float _combatTextRise = 1.2f;
+    [Tooltip("월드 공간 폰트 크기")]
+    [SerializeField] private float _combatTextFontSize = 5f;
+    [Tooltip("통상 데미지 색")]
+    [SerializeField] private Color _damageColor = new Color(1f, 0.95f, 0.85f, 1f);
+    [Tooltip("크리티컬 데미지 색")]
+    [SerializeField] private Color _criticalColor = new Color(1f, 0.72f, 0.2f, 1f);
+    [Tooltip("회피(AVOID) 색")]
+    [SerializeField] private Color _avoidColor = new Color(0.7f, 0.85f, 1f, 1f);
+
 
     public static BattleManager BattleInstance;
 
@@ -615,6 +629,34 @@ public class BattleManager : MonoBehaviour
         StartCoroutine(AttackSequence(_unit, _defender));
     }
 
+    // 피격 결과를 대상 머리 위에 문자로 띄운다.
+    //   명중 : 데미지 수치 (크리티컬이면 색이 바뀌고 뒤에 ! 가 붙는다)
+    //   회피 : AVOID
+    // FloatingCombatText 가 월드 공간 TMP 를 런타임에 만들기 때문에 프리팹이 필요하지 않다.
+    private void ShowCombatText(Unit _target, DamageResult _result)
+    {
+        if (_target == null) return;
+
+        string _body;
+        Color _color;
+
+        if (_result.Hit)
+        {
+            _body = _result.Critical ? $"{_result.Amount}!" : _result.Amount.ToString();
+            _color = _result.Critical ? _criticalColor : _damageColor;
+        }
+        else
+        {
+            _body = "AVOID";
+            _color = _avoidColor;
+        }
+
+        float _size = _result.Critical ? _combatTextFontSize * 1.3f : _combatTextFontSize;
+
+        FloatingCombatText.Show(_target.transform, _body, _color,
+                                _size, _combatTextDuration, _combatTextRise);
+    }
+
     // 기본 공격 판정: 명중/회피 → 방어력 반영 데미지 → 속성 상성 → 크리티컬 순으로 계산한다.
     // (TC 128 방어력, 130 크리티컬, 131 명중/회피, 132 속성 상성)
     private DamageResult ResolveAttack(Stat _attacker, Stat _defender)
@@ -704,6 +746,9 @@ public class BattleManager : MonoBehaviour
         {
             Debug.Log($"{_monster.Stat.Name}의 공격이 빗나갔습니다.");
         }
+
+        // 사망 처리보다 먼저 띄운다. 죽은 유닛은 대열에서 빠지므로 위치를 잡을 수 없다
+        ShowCombatText(_character, result);
 
         UnitDeath(_character);
     }
@@ -1157,6 +1202,9 @@ public class BattleManager : MonoBehaviour
         {
             Debug.Log($"{_attacker.Stat.Name}의 공격이 빗나갔습니다.");
         }
+
+        // 사망 처리보다 먼저 띄운다. 죽은 유닛은 대열에서 빠지므로 위치를 잡을 수 없다
+        ShowCombatText(_monster, result);
 
         UnitDeath(_monster);
     }

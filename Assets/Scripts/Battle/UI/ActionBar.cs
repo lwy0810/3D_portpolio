@@ -1,19 +1,21 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
 /// 행동 순서 바.
 ///
 /// 두 가지 방식으로 동작한다.
-///   · BattleFlow 가 있으면 : AT 큐를 구독해 정렬된 순서를 그대로 렌더한다.
-///   · 없으면              : 기존 턴 방식(TrunMove)을 따른다.
+///   · BattleFlow 가 있으면 (AT 큐 모드)
+///       유닛 1명에 슬롯 1개를 두고, 큐가 바뀌면 각 슬롯의 목표 줄만 바꾼다.
+///       슬롯이 재생성되지 않으므로 초상화가 그 자리에서 미끄러져 이동한다.
+///   · 없으면 (기존 턴 모드)
+///       CreateCommandActionMemberSystem 의 목록을 그대로 쓴다.
 ///
 /// 커맨드를 고르면 이번 행동 뒤에 들어갈 자리에 슬롯(ProjectedSlot)을 미리 만든다.
-/// 슬롯은 왼쪽에서 미끄러져 들어오고, 밀려나는 슬롯들은 서서히 아래로 내려간다.
-/// 취소하면 사라지고, 실제로 턴이 넘어가면 그 슬롯이 그대로 실제 슬롯이 된다.
+/// 왼쪽에서 미끄러져 들어오고, 밀려나는 슬롯들은 서서히 아래로 내려간다.
+/// 취소하면 사라지고, 턴이 넘어가면 실제 순서에 반영된다.
 /// </summary>
 public class ActionBar : MonoBehaviour
 {
@@ -41,8 +43,12 @@ public class ActionBar : MonoBehaviour
     [Tooltip("사라지는 슬롯의 페이드아웃 시간")]
     [SerializeField] private float _fadeOutTime = 0.18f;
 
-    private readonly List<BattleUnit> _rendered = new List<BattleUnit>();
+    // ── AT 큐 모드 상태 ─────────────────────────────────────
+    private readonly List<BattleUnit> _queueOrder = new List<BattleUnit>();
+    private readonly Dictionary<BattleUnit, GameObject> _slotByUnit
+        = new Dictionary<BattleUnit, GameObject>();
 
+    // ── 공용 ────────────────────────────────────────────────
     private GameObject _badgeRoot;
     private TextMeshProUGUI _badgeText;
 
@@ -52,11 +58,13 @@ public class ActionBar : MonoBehaviour
     private bool _subscribed;
     private bool _warnedNoFactory;
 
-    /// <summary>배지와 예상 슬롯을 붙일 부모. 기본은 자기 자신.</summary>
     private Transform BarRoot => _barRoot != null ? _barRoot : transform;
     private Transform _barRoot;
 
+    private bool QueueMode => BattleFlow.Instance != null;
     private bool HasGhost => _ghostSlot != null && _ghostSlot.activeSelf && _projectedRow >= 0;
+
+    private float SlotHeight => _factory != null ? _factory.SlotHeight : 70f;
 
     // ── 연결 ────────────────────────────────────────────────
 
@@ -66,21 +74,16 @@ public class ActionBar : MonoBehaviour
         if (_factory == null) _factory = FindFirstObjectByType<CreateCommandActionMemberSystem>();
 
         if (_factory == null)
-            Debug.LogWarning("[ActionBar] CreateCommandActionMemberSystem 을 찾지 못했습니다. " +
-                             "배지 위치와 예상 슬롯이 제한됩니다.");
+            Debug.LogWarning("[ActionBar] CreateCommandActionMemberSystem 을 찾지 못했습니다.");
     }
 
-    /// <summary>
-    /// BattleManager 가 액션 바 오브젝트와 팩토리를 넘겨준다.
-    /// 컴포넌트가 어느 오브젝트에 붙어 있든 배지가 올바른 부모 밑에 생성된다.
-    /// </summary>
     public void Bind(Transform barRoot, CreateCommandActionMemberSystem factory)
     {
         if (barRoot != null) _barRoot = barRoot;
         if (factory != null) _factory = factory;
 
         Debug.Log($"[ActionBar] Bind 완료 — bar={(_barRoot != null ? _barRoot.name : "null")}, " +
-                  $"factory={(_factory != null ? "OK" : "null")}");
+                  $"factory={(_factory != null ? "OK" : "null")}, mode={(QueueMode ? "AT 큐" : "기존 턴")}");
     }
 
     void OnEnable() { TrySubscribe(); }
@@ -111,17 +114,130 @@ public class ActionBar : MonoBehaviour
         _subscribed = false;
     }
 
-    // ── 배치 연출 ───────────────────────────────────────────
+    // ── AT 큐 모드 렌더 ─────────────────────────────────────
 
     /// <summary>
-    /// 슬롯을 목표 좌표로 서서히 옮긴다.
-    /// 예상 슬롯이 중간에 끼어들면 그 아래 슬롯들이 한 칸씩 내려간다.
+    /// 큐가 바뀔 때마다 호출된다. 유닛별 슬롯을 유지하고 목표 줄만 갱신하므로
+    /// 초상화가 새로 그려지지 않고 그 자리에서 이동한다.
     /// </summary>
+    public void Render(List<BattleUnit> queue)
+    {
+        if (_factory == null || queue == null) return;
+
+        int want = Mathf.Min(_visibleCount, queue.Count);
+
+        _queueOrder.Clear();
+        for (int i = 0; i < want; i++) _queueOrder.Add(queue[i]);
+
+        // 보이지 않게 된 유닛의 슬롯은 정리한다
+        List<BattleUnit> gone = null;
+
+        foreach (KeyValuePair<BattleUnit, GameObject> kv in _slotByUnit)
+        {
+            if (_queueOrder.Contains(kv.Key)) continue;
+
+            if (gone == null) gone = new List<BattleUnit>();
+            gone.Add(kv.Key);
+        }
+
+        if (gone != null)
+        {
+            for (int i = 0; i < gone.Count; i++)
+            {
+                GameObject slot = _slotByUnit[gone[i]];
+                _slotByUnit.Remove(gone[i]);
+                if (slot != null) StartCoroutine(FadeOutAndDestroy(slot));
+            }
+        }
+
+        // 없는 슬롯은 만들고, AT 값을 갱신한다
+        for (int i = 0; i < _queueOrder.Count; i++)
+        {
+            BattleUnit u = _queueOrder[i];
+            if (u == null || u.Unit == null) continue;
+
+            GameObject slot;
+
+            if (!_slotByUnit.TryGetValue(u, out slot) || slot == null)
+            {
+                slot = CreateQueueSlot(u, i);
+                if (slot == null) continue;
+
+                _slotByUnit[u] = slot;
+            }
+
+            SetSlotAt(slot, u);
+        }
+    }
+
+    private GameObject CreateQueueSlot(BattleUnit unit, int row)
+    {
+        if (_factory.Prefab == null)
+        {
+            WarnNoFactory();
+            return null;
+        }
+
+        GameObject slot = Instantiate(_factory.Prefab, BarRoot);
+        slot.name = unit.Stat.Name;
+
+        _factory.ImageReset(unit.Unit, slot);
+
+        RectTransform rt = slot.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchoredPosition = SlotPos(row) - new Vector2(_slideInFromX, 0f);
+            rt.localScale = Vector3.one;
+        }
+
+        CanvasGroup cg = slot.GetComponent<CanvasGroup>();
+        if (cg == null) cg = slot.AddComponent<CanvasGroup>();
+        cg.alpha = 1f;
+
+        return slot;
+    }
+
+    // ── 배치 연출 ───────────────────────────────────────────
+
     private void AnimateLayout()
     {
         if (_factory == null) return;
 
         float t = 1f - Mathf.Exp(-_moveSpeed * Time.deltaTime);
+
+        if (QueueMode) AnimateQueueMode(t);
+        else AnimateLegacyMode(t);
+
+        if (HasGhost)
+        {
+            RectTransform grt = _ghostSlot.GetComponent<RectTransform>();
+            grt.anchoredPosition = Vector2.Lerp(grt.anchoredPosition, SlotPos(_projectedRow), t);
+            RefreshBadgePosition();
+        }
+    }
+
+    private void AnimateQueueMode(float t)
+    {
+        for (int i = 0; i < _queueOrder.Count; i++)
+        {
+            BattleUnit u = _queueOrder[i];
+
+            GameObject slot;
+            if (!_slotByUnit.TryGetValue(u, out slot) || slot == null) continue;
+
+            RectTransform rt = slot.GetComponent<RectTransform>();
+            if (rt == null) continue;
+
+            int row = i + RowShift(i);
+
+            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition, SlotPos(row), t);
+            rt.localScale = Vector3.Lerp(rt.localScale,
+                Vector3.one * (row == 0 ? _factory.CurrentScale : 1f), t);
+        }
+    }
+
+    private void AnimateLegacyMode(float t)
+    {
         List<GameObject> list = _factory.ActionMemberlist;
 
         for (int i = 0; i < list.Count; i++)
@@ -133,76 +249,21 @@ public class ActionBar : MonoBehaviour
             if (rt == null) continue;
 
             int row = i + RowShift(i);
-            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition,
-                                               _factory.SlotAnchoredPosition(row), t);
-        }
-
-        if (HasGhost)
-        {
-            RectTransform grt = _ghostSlot.GetComponent<RectTransform>();
-            grt.anchoredPosition = Vector2.Lerp(grt.anchoredPosition,
-                                                _factory.SlotAnchoredPosition(_projectedRow), t);
-            RefreshBadgePosition();
+            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition, SlotPos(row), t);
         }
     }
 
-    /// <summary>예상 슬롯이 이 슬롯보다 위에 끼어들면 한 칸 밀린다.</summary>
+    /// <summary>예상 슬롯이 이 줄보다 위에 끼어들면 한 칸 밀린다.</summary>
     private int RowShift(int index)
     {
         if (!HasGhost) return 0;
         return index >= _projectedRow ? 1 : 0;
     }
 
-    // ── AT 큐 렌더 ──────────────────────────────────────────
-
-    public void Render(List<BattleUnit> queue)
+    private Vector2 SlotPos(int row)
     {
-        if (_factory == null || queue == null) return;
-
-        int want = Mathf.Min(_visibleCount, queue.Count);
-
-        _rendered.Clear();
-        for (int i = 0; i < want; i++) _rendered.Add(queue[i]);
-
-        while (_factory.ActionMemberlist.Count > want) RemoveLast();
-
-        while (_factory.ActionMemberlist.Count < want)
-        {
-            int idx = _factory.ActionMemberlist.Count;
-            if (_factory.CreateSlot(_rendered[idx].Unit, BarRoot) == null) break;
-        }
-
-        for (int i = 0; i < _factory.ActionMemberlist.Count && i < _rendered.Count; i++)
-        {
-            GameObject slot = _factory.ActionMemberlist[i];
-            if (slot == null) continue;
-
-            BattleUnit u = _rendered[i];
-
-            if (slot.name != u.Stat.Name)
-            {
-                slot.name = u.Stat.Name;
-                _factory.ImageReset(u.Unit, slot);
-
-                if (i < _factory.CharacterNames.Count) _factory.CharacterNames[i] = u.Stat.Name;
-            }
-
-            SetSlotAt(slot, u);
-        }
-
-        _factory.Reposition(false);          // 좌표는 AnimateLayout 이 맞춘다
-    }
-
-    private void RemoveLast()
-    {
-        List<GameObject> list = _factory.ActionMemberlist;
-        if (list.Count == 0) return;
-
-        int last = list.Count - 1;
-        if (list[last] != null) Destroy(list[last]);
-        list.RemoveAt(last);
-
-        if (_factory.CharacterNames.Count > last) _factory.CharacterNames.RemoveAt(last);
+        return _factory != null ? _factory.SlotAnchoredPosition(row)
+                                : new Vector2(0f, -row * SlotHeight);
     }
 
     /// <summary>프리팹에 "AtText" 가 있으면 AT 값을 채운다.</summary>
@@ -216,7 +277,7 @@ public class ActionBar : MonoBehaviour
 
     // ── 딜레이 프리뷰 ───────────────────────────────────────
 
-    /// <summary>AT 큐를 쓰는 경우. Final Delay = floor(100 * BaseDelay / SPD)</summary>
+    /// <summary>AT 큐 모드. Final Delay = floor(100 * BaseDelay / SPD)</summary>
     public void ShowDelayPreview(BattleUnit actor, int baseDelay)
     {
         if (actor == null || baseDelay <= 0)
@@ -230,10 +291,7 @@ public class ActionBar : MonoBehaviour
         ShowPreview(actor.Unit, delay, ProjectedRowByAt(actor, actor.At + delay));
     }
 
-    /// <summary>
-    /// BattleFlow 가 없을 때. 지금 턴 방식(TrunMove)은 행동한 유닛을 목록 맨 뒤로
-    /// 보내므로 예상 자리는 마지막 줄 다음이다.
-    /// </summary>
+    /// <summary>기존 턴 모드. 행동한 유닛은 목록 맨 뒤로 가므로 마지막 줄 다음이다.</summary>
     public void ShowDelayPreview(Unit actor, int baseDelay)
     {
         if (actor == null || actor.Stat == null || baseDelay <= 0)
@@ -271,44 +329,48 @@ public class ActionBar : MonoBehaviour
         RefreshBadgePosition();
     }
 
-    /// <summary>
-    /// 공격 연출이 시작되면 배지만 감추고 예상 슬롯은 남긴다.
-    /// 그 슬롯이 다음 턴에 그대로 실제 슬롯이 되어야 하기 때문이다.
-    /// </summary>
+    /// <summary>연출 중에는 배지만 감춘다. 예상 슬롯은 턴 확정 때 처리된다.</summary>
     public void LockPreview()
     {
         if (_badgeRoot != null) _badgeRoot.SetActive(false);
     }
 
-    /// <summary>커맨드를 취소했을 때. 예상 슬롯과 배지를 모두 없앤다.</summary>
+    /// <summary>취소. 예상 슬롯과 배지를 모두 없앤다.</summary>
     public void ClearPreview()
     {
         if (_badgeRoot != null) _badgeRoot.SetActive(false);
         DestroyGhost();
     }
 
-    /// <summary>기존 이름 유지. 취소와 같은 동작이다.</summary>
     public void HideDelayPreview() { ClearPreview(); }
 
     // ── 턴 확정 ─────────────────────────────────────────────
 
     /// <summary>
     /// 다음 캐릭터 턴이 시작될 때 호출한다.
-    ///   1) 방금 행동한 캐릭터의 선두 슬롯을 페이드아웃시켜 없앤다
-    ///   2) 미리 만들어 둔 예상 슬롯을 그 자리(계산된 줄)의 실제 슬롯으로 승격시킨다
-    ///      예상 슬롯이 없으면(적 턴 등) 새로 만들어 맨 뒤에 붙인다
+    ///
+    /// AT 큐 모드에서는 큐가 이미 새 순서를 알고 있으므로 예상 슬롯만 없앤다.
+    /// 각 유닛의 슬롯이 목표 줄로 미끄러져 이동한다.
+    ///
+    /// 기존 턴 모드에서는 선두 슬롯을 페이드아웃시키고, 미리 만들어 둔
+    /// 예상 슬롯을 그 자리의 실제 슬롯으로 승격시킨다.
     /// </summary>
     public void CommitTurn(Unit actedUnit)
     {
         if (_factory == null) return;
 
+        if (QueueMode)
+        {
+            DestroyGhost();
+            LockPreview();
+            return;
+        }
+
         int ghostRow = _projectedRow;
 
-        // 1) 선두 슬롯 분리 후 페이드아웃
         GameObject leaving = _factory.DetachFirst();
         if (leaving != null) StartCoroutine(FadeOutAndDestroy(leaving));
 
-        // 행동한 유닛이 이 턴에 사망했으면 자리를 만들지 않는다
         bool alive = actedUnit != null && actedUnit.Stat != null && actedUnit.Stat.Hp > 0;
 
         if (!alive)
@@ -319,23 +381,21 @@ public class ActionBar : MonoBehaviour
             return;
         }
 
-        // 2) 예상 슬롯 승격
         if (_ghostSlot != null && ghostRow >= 0)
         {
             GameObject promoted = _ghostSlot;
             _ghostSlot = null;
+            _projectedRow = -1;
 
             CanvasGroup cg = promoted.GetComponent<CanvasGroup>();
             if (cg != null) { cg.alpha = 1f; cg.blocksRaycasts = true; }
 
-            string unitName = actedUnit != null && actedUnit.Stat != null
-                              ? actedUnit.Stat.Name : promoted.name;
+            string unitName = actedUnit.Stat.Name;
             promoted.name = unitName;
 
-            // 선두를 뺀 뒤의 인덱스로 환산한다
             _factory.InsertSlot(ghostRow - 1, promoted, unitName);
         }
-        else if (actedUnit != null)
+        else
         {
             _factory.CreateSlot(actedUnit, BarRoot);
         }
@@ -343,7 +403,7 @@ public class ActionBar : MonoBehaviour
         _projectedRow = -1;
         LockPreview();
 
-        _factory.Reposition(false);          // 좌표는 AnimateLayout 이 맞춘다
+        _factory.Reposition(false);
     }
 
     private IEnumerator FadeOutAndDestroy(GameObject slot)
@@ -368,7 +428,7 @@ public class ActionBar : MonoBehaviour
     // ── 예상 자리 계산 ──────────────────────────────────────
 
     /// <summary>
-    /// AT 큐 기준. 현재 행동 캐릭터 슬롯이 아직 0줄에 있으므로 +1 한다.
+    /// AT 큐 기준. 현재 행동 유닛 슬롯이 아직 0줄에 있으므로 +1 한다.
     /// </summary>
     private int ProjectedRowByAt(BattleUnit actor, int projectedAt)
     {
@@ -387,10 +447,7 @@ public class ActionBar : MonoBehaviour
         return Mathf.Clamp(row + 1, 1, Mathf.Max(1, _visibleCount));
     }
 
-    /// <summary>
-    /// 지금 턴 방식 기준. 살아있는 유닛 수가 곧 마지막 줄 다음 자리다.
-    /// 이 +1 이 빠져서 마지막 슬롯과 겹쳐 보였다.
-    /// </summary>
+    /// <summary>기존 턴 모드 기준. 살아있는 유닛 수가 곧 마지막 줄 다음 자리다.</summary>
     private int ProjectedRowByTurnList()
     {
         if (GameManager.GameInstance == null) return -1;
@@ -431,16 +488,14 @@ public class ActionBar : MonoBehaviour
                              "Window > TextMeshPro > Import TMP Essential Resources 를 실행하세요.");
     }
 
-    /// <summary>PosX 는 고정이고, 세로는 예상 슬롯과 같은 줄에 맞춘다.</summary>
     private void RefreshBadgePosition()
     {
         if (_badgeRoot == null || !_badgeRoot.activeSelf) return;
 
         int row = _projectedRow >= 0 ? _projectedRow : 0;
-        float y = _factory != null ? _factory.SlotAnchoredPosition(row).y : -row * 70f;
 
         RectTransform rt = _badgeRoot.GetComponent<RectTransform>();
-        rt.anchoredPosition = new Vector2(_badgePosX, y);
+        rt.anchoredPosition = new Vector2(_badgePosX, SlotPos(row).y);
         rt.SetAsLastSibling();
     }
 
@@ -448,16 +503,7 @@ public class ActionBar : MonoBehaviour
 
     private void ShowGhost(Unit actorUnit, int row)
     {
-        if (_factory == null || _factory.Prefab == null)
-        {
-            if (!_warnedNoFactory)
-            {
-                _warnedNoFactory = true;
-                Debug.LogWarning("[ActionBar] 예상 위치 슬롯을 만들 수 없습니다. " +
-                                 "CreateCommandActionMemberSystem 의 프리팹이 비어 있습니다.");
-            }
-            return;
-        }
+        if (_factory == null || _factory.Prefab == null) { WarnNoFactory(); return; }
 
         bool created = false;
 
@@ -470,7 +516,6 @@ public class ActionBar : MonoBehaviour
 
         _factory.ImageReset(actorUnit, _ghostSlot);
 
-        // 예상 슬롯도 실제 슬롯이 될 것이므로 투명하지 않게 둔다
         CanvasGroup cg = _ghostSlot.GetComponent<CanvasGroup>();
         if (cg == null) cg = _ghostSlot.AddComponent<CanvasGroup>();
         cg.alpha = 1f;
@@ -482,7 +527,7 @@ public class ActionBar : MonoBehaviour
         if (created)
         {
             // 왼쪽에서 미끄러져 들어온다. 실제 이동은 AnimateLayout 이 담당
-            rt.anchoredPosition = _factory.SlotAnchoredPosition(row) - new Vector2(_slideInFromX, 0f);
+            rt.anchoredPosition = SlotPos(row) - new Vector2(_slideInFromX, 0f);
         }
 
         rt.SetAsLastSibling();
@@ -492,9 +537,19 @@ public class ActionBar : MonoBehaviour
     private void DestroyGhost()
     {
         _projectedRow = -1;
+
         if (_ghostSlot == null) return;
 
         Destroy(_ghostSlot);
         _ghostSlot = null;
+    }
+
+    private void WarnNoFactory()
+    {
+        if (_warnedNoFactory) return;
+
+        _warnedNoFactory = true;
+        Debug.LogWarning("[ActionBar] 슬롯을 만들 수 없습니다. " +
+                         "CreateCommandActionMemberSystem 의 프리팹이 비어 있습니다.");
     }
 }

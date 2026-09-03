@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -42,12 +43,19 @@ public class FloatingCombatText : MonoBehaviour
     /// </summary>
     public static bool DebugBackground = false;
 
+    // 대상 하나당 문자 하나. 이미 떠 있으면 새로 만들지 않고 그 문자의 값을 바꾼다
+    private static readonly Dictionary<Transform, FloatingCombatText> _active =
+        new Dictionary<Transform, FloatingCombatText>();
+
     private RectTransform _rect;
     private TextMeshProUGUI _text;
     private Camera _camera;
 
-    // 대상이 죽어서 사라져도 문자가 남도록 좌표를 처음에 한 번만 받아둔다
+    // 대상이 죽어서 사라져도 문자가 남도록 좌표를 받아둔다
     private Vector3 _worldAnchor;
+
+    // 재사용 판단과 좌표 갱신에 쓰는 대상
+    private Transform _target;
 
     private float _duration = 1.0f;
     private float _risePixels = 60f;
@@ -81,6 +89,15 @@ public class FloatingCombatText : MonoBehaviour
 
         Canvas canvas = EnsureCanvas();
 
+        // 이미 이 대상 위에 문자가 떠 있으면 새로 만들지 않고 값만 갈아끼운다.
+        // 회피 → 데미지, 데미지 수치 변화, 데미지 → 회피 모두 이 경로로 바뀐다
+        FloatingCombatText live;
+        if (_active.TryGetValue(target, out live) && live != null)
+        {
+            live.Refresh(cam, target, body, color, fontSizePx, duration, risePixels);
+            return live;
+        }
+
         // RectTransform, CanvasRenderer, 문자 컴포넌트를 한 번에 붙여서 만든다.
         // 이 순서가 UI 문자를 런타임에 만드는 정석이다
         GameObject obj = new GameObject("FloatingCombatText",
@@ -92,7 +109,9 @@ public class FloatingCombatText : MonoBehaviour
         obj.layer = canvas.gameObject.layer;
 
         FloatingCombatText fct = obj.AddComponent<FloatingCombatText>();
-        fct.Setup(cam, AnchorPosition(target), body, color, fontSizePx, duration, risePixels);
+        fct.Setup(cam, target, body, color, fontSizePx, duration, risePixels);
+
+        _active[target] = fct;
 
         return fct;
     }
@@ -115,6 +134,9 @@ public class FloatingCombatText : MonoBehaviour
                 return _canvas;
             }
         }
+
+        // 씬이 바뀌어 캔버스를 새로 만드는 상황이면 이전 씬의 문자 기록은 버린다
+        _active.Clear();
 
         // CanvasScaler 는 붙이지 않는다. 기본 캔버스가 이미 화면 픽셀 1:1 이다
         GameObject obj = new GameObject(CanvasName, typeof(Canvas));
@@ -195,11 +217,12 @@ public class FloatingCombatText : MonoBehaviour
         return target.position + Vector3.up * 2.0f;
     }
 
-    private void Setup(Camera cam, Vector3 worldAnchor, string body, Color color,
+    private void Setup(Camera cam, Transform target, string body, Color color,
                        float fontSizePx, float duration, float risePixels)
     {
         _camera = cam;
-        _worldAnchor = worldAnchor;
+        _target = target;
+        _worldAnchor = AnchorPosition(target);
         _duration = Mathf.Max(0.1f, duration);
         _risePixels = risePixels;
 
@@ -263,6 +286,62 @@ public class FloatingCombatText : MonoBehaviour
     }
 
     /// <summary>
+    /// 이미 떠 있는 문자의 값을 바꾸고 표시 시간을 처음부터 다시 센다.
+    /// 문자를 지우고 새로 만들지 않으므로 대상 위에 항상 하나만 남는다.
+    /// </summary>
+    private void Refresh(Camera cam, Transform target, string body, Color color,
+                         float fontSizePx, float duration, float risePixels)
+    {
+        _camera = cam;
+        _target = target;
+        _duration = Mathf.Max(0.1f, duration);
+        _risePixels = risePixels;
+
+        // 대상이 움직였을 수 있으므로 좌표를 다시 잡는다
+        if (target != null) _worldAnchor = AnchorPosition(target);
+
+        if (_text != null)
+        {
+            _text.text = body;
+            _text.color = color;
+            _text.fontSize = fontSizePx;
+            _text.alpha = 1f;
+            _text.ForceMeshUpdate();
+        }
+
+        // 처음부터 다시 세면 팝 연출과 사라짐이 함께 되돌아간다
+        _elapsed = 0f;
+
+        UpdateScreenPosition(0f);
+
+        if (DebugLog)
+        {
+            Debug.Log($"[FloatingCombatText] \"{body}\" 로 갱신 " +
+                      $"(대상 {(target != null ? target.name : "없음")})");
+        }
+    }
+
+    void OnDestroy()
+    {
+        // 대상이 이미 파괴되어 키로 찾을 수 없는 경우까지 확실히 지운다
+        Transform key = null;
+        bool found = false;
+
+        foreach (KeyValuePair<Transform, FloatingCombatText> pair in _active)
+        {
+            if (pair.Value == this)
+            {
+                key = pair.Key;
+                found = true;
+                break;
+            }
+        }
+
+        // 파괴된 대상은 null 비교가 참이 되므로 찾았는지 여부로 판단한다
+        if (found) _active.Remove(key);
+    }
+
+    /// <summary>
     /// 확인용 배경 상자. 상자는 보이는데 문자가 안 보이면 폰트/셰이더 문제,
     /// 상자도 안 보이면 캔버스 문제로 원인이 갈린다.
     /// </summary>
@@ -295,6 +374,9 @@ public class FloatingCombatText : MonoBehaviour
     {
         if (_camera == null) _camera = FindCamera();
         if (_camera == null || _rect == null) return;
+
+        // 대상이 살아 있으면 좌표를 계속 따라간다. 죽어 사라졌으면 마지막 좌표에 남는다
+        if (_target != null) _worldAnchor = AnchorPosition(_target);
 
         Vector3 screen = _camera.WorldToScreenPoint(_worldAnchor);
 
@@ -340,7 +422,7 @@ public class FloatingCombatText : MonoBehaviour
             float scale = t < popPortion
                           ? Mathf.Lerp(0.6f, 1.15f, t / popPortion)
                           : Mathf.Lerp(1.15f, 1.0f, (t - popPortion) / (1f - popPortion));
-            _rect.localScale = Vector3.one * scale;
+            if (_rect != null) _rect.localScale = Vector3.one * scale;
 
             // 후반 40% 구간에서 사라진다
             if (_text != null)

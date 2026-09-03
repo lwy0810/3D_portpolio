@@ -16,7 +16,10 @@ public class BattleManager : MonoBehaviour
         Skill,
         Targeting,
         Instrument,
-        Retreat
+        Retreat,
+
+        // 몬스터가 행동하는 동안. 플레이어 입력을 받지 않고 커맨드 UI 를 감춘다
+        MonsterTurn
     };
 
     private const string FieldSceneName = "Field";
@@ -42,6 +45,10 @@ public class BattleManager : MonoBehaviour
     [SerializeField] private string _runStateName = "RunForward";
     [Tooltip("Animator 에 Attack 트리거가 없을 때 이 상태를 직접 재생한다")]
     [SerializeField] private string _attackStateName = "Attack1";
+    [Tooltip("공격 동작이 시작된 뒤 실제로 맞는 시점까지의 시간(초). 이때 데미지와 문자가 나온다")]
+    [SerializeField] private float _attackImpactDelay = 0.4f;
+    [Tooltip("공격 동작 전체 길이(초). 이 시간이 지나면 원위치로 복귀한다")]
+    [SerializeField] private float _attackAnimSeconds = 1.5f;
 
     [Header("전투 문자(데미지/회피) UI")]
     [Tooltip("피격 지점 위에 문자가 떠 있는 시간(초)")]
@@ -313,7 +320,7 @@ public class BattleManager : MonoBehaviour
 
             if (_actor is Monster _monster)
             {
-                _commandState = CommandState.Select;
+                _commandState = CommandState.MonsterTurn;
                 StartCoroutine(MonsterTurnRoutine(_monster));
             }
             else
@@ -435,6 +442,9 @@ public class BattleManager : MonoBehaviour
 
         List<Unit> _units = GameManager.GameInstance.Units;
         if (_units == null || _units.Count == 0) return;
+
+        // 몬스터 턴에는 어떤 입력도 받지 않는다
+        if (_commandState == CommandState.MonsterTurn) return;
 
         Unit _currentUnit = _units[0];
         if (_currentUnit == null || _currentUnit is Monster) return;
@@ -568,6 +578,17 @@ public class BattleManager : MonoBehaviour
         }
     }
 
+    // 몬스터 턴으로 넘어갈 때 바닥에 남아 있는 타깃 표시를 모두 지운다
+    private void HideAllTargetAreas()
+    {
+        int _count = SafeMonsterCount();
+
+        for (int i = 0; i < _count; i++)
+        {
+            if (Monsters[i] != null) Monsters[i].TargetAreaUnShow();
+        }
+    }
+
     private void ApplyCommandStateViews(CommandState state)
     {
         UpdateDelayPreview(state);
@@ -621,6 +642,16 @@ public class BattleManager : MonoBehaviour
                 ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.targetView, false);
                 ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.commandArea, false);
                 break;
+
+            // 몬스터 턴 : 플레이어가 조작할 것이 없으므로 커맨드 UI 전체를 감춘다
+            case CommandState.MonsterTurn:
+                ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.skillSelectView, false);
+                ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.instrumentSelectView, false);
+                ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.MemuButtontInfoBar, false);
+                ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.targetView, false);
+                ViewManager.ViewInstance.CommandBattleViewActive(ViewCategory.commandArea, false);
+                HideAllTargetAreas();
+                break;
         }
     }
 
@@ -631,6 +662,22 @@ public class BattleManager : MonoBehaviour
 
         Unit _defender = _monster != null ? _monster.GetComponent<Unit>() : null;
         StartCoroutine(AttackSequence(_unit, _defender));
+    }
+
+    // 데미지 판정. 공격자가 몬스터인지에 따라 방향만 다르고 공식은 같다.
+    // AttackSequence 에서 맞는 순간에 호출된다.
+    private void ApplyAttackDamage(Unit _attacker, Unit _defender)
+    {
+        if (_attacker == null || _defender == null) return;
+
+        if (_attacker is Monster _atkMonster && _defender is Character _defCharacter)
+        {
+            MonsterAttack(_defCharacter, _atkMonster);
+        }
+        else if (_defender is Monster _defMonster)
+        {
+            MonsterTakeDmg(_attacker, _defMonster);
+        }
     }
 
     // 피격 결과를 대상 머리 위에 문자로 띄운다.
@@ -655,12 +702,12 @@ public class BattleManager : MonoBehaviour
             _color = _avoidColor;
         }
 
-        float _size = _result.Critical ? _combatTextFontSizePx * 1.3f : _combatTextFontSizePx;
-
         Debug.Log($"BattleManager : 전투 문자 — {_target.Stat.Name} 위에 \"{_body}\" 표시");
 
         FloatingCombatText.DebugHold = _combatTextDebugHold;
         FloatingCombatText.DebugBackground = _combatTextDebugBackground;
+
+        float _size = _result.Critical ? _combatTextFontSizePx * 1.3f : _combatTextFontSizePx;
 
         FloatingCombatText.Show(_target.transform, _body, _color,
                                 _size, _combatTextDuration, _combatTextRisePx);
@@ -705,6 +752,9 @@ public class BattleManager : MonoBehaviour
     private IEnumerator MonsterTurnRoutine(Monster _monster)
     {
         if (_isBattleOver || _monster == null) yield break;
+
+        // 어느 경로로 들어와도 몬스터 턴에는 커맨드 UI 가 꺼져 있어야 한다
+        _commandState = CommandState.MonsterTurn;
 
         List<Character> _livingCharacters = Characters.Where(c => c != null && c.Stat.Hp > 0).ToList();
         if (_livingCharacters.Count == 0)
@@ -945,7 +995,14 @@ public class BattleManager : MonoBehaviour
         if (HasAnimParam(_animator, "Attack")) _animator.SetTrigger("Attack");
         else TryCrossFade(_animator, _attackStateName, 0.05f);
 
-        yield return new WaitForSeconds(1.5f);
+        // 맞는 시점까지 기다린다
+        yield return new WaitForSeconds(Mathf.Max(0f, _attackImpactDelay));
+
+        // 데미지 판정과 문자 표시는 맞는 순간에 한다. 복귀를 기다리지 않는다
+        ApplyAttackDamage(_attacker, _defender);
+
+        // 남은 공격 동작을 마친다
+        yield return new WaitForSeconds(Mathf.Max(0f, _attackAnimSeconds - _attackImpactDelay));
 
         // 원위치로 복귀
         PlayRun(_animator, _useParams, moveSpeedUnits);
@@ -976,25 +1033,20 @@ public class BattleManager : MonoBehaviour
 
         StopRun(_animator, _useParams, _idleStateHash);
 
-        // 데미지 판정. 공격자가 몬스터인지에 따라 방향만 다르고 공식은 같다
-        if (_attacker is Monster _atkMonster && _defender is Character _defCharacter)
-        {
-            MonsterAttack(_defCharacter, _atkMonster);
-        }
-        else if (_defender is Monster _defMonster)
-        {
-            MonsterTakeDmg(_attacker, _defMonster);
-        }
-
         yield return new WaitForSeconds(0.5f);
 
-        _commandState = CommandState.Select;
         IsAttack = false;
 
         if (!_isBattleOver)
         {
             TrunMove(_attacker);
         }
+
+        // 다음 행동 유닛이 몬스터면 커맨드 UI 를 계속 감춘 상태로 둔다.
+        // 여기서 Select 로 되돌리면 몬스터 턴 사이에 커맨드 창이 한 순간 깜빡인다
+        _commandState = CurrentActor() is Monster
+                        ? CommandState.MonsterTurn
+                        : CommandState.Select;
     }
 
     // ── 연출 보조 ───────────────────────────────────────────
@@ -1298,6 +1350,7 @@ public class BattleManager : MonoBehaviour
 
         if (_nextUnit is Monster _monster)
         {
+            _commandState = CommandState.MonsterTurn;
             StartCoroutine(MonsterTurnRoutine(_monster));
         }
     }
@@ -1393,6 +1446,10 @@ public class BattleManager : MonoBehaviour
                 // 공격 연출 중에는 배지만 감춘다. 예상 슬롯은 다음 턴에
                 // 그대로 실제 슬롯이 되어야 하므로 남겨둔다
                 _actionBar.LockPreview();
+                break;
+
+            case CommandState.MonsterTurn:
+                // 예상 슬롯은 MonsterTurnRoutine 이 직접 관리한다. 건드리지 않는다
                 break;
 
             default:

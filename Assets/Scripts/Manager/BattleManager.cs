@@ -46,16 +46,20 @@ public class BattleManager : MonoBehaviour
     [Header("전투 문자(데미지/회피) UI")]
     [Tooltip("피격 지점 위에 문자가 떠 있는 시간(초)")]
     [SerializeField] private float _combatTextDuration = 1.0f;
-    [Tooltip("표시되는 동안 위로 떠오르는 거리(m)")]
-    [SerializeField] private float _combatTextRise = 1.2f;
-    [Tooltip("월드 공간 폰트 크기")]
-    [SerializeField] private float _combatTextFontSize = 5f;
+    [Tooltip("표시되는 동안 위로 떠오르는 거리(픽셀)")]
+    [SerializeField] private float _combatTextRisePx = 60f;
+    [Tooltip("폰트 크기(픽셀)")]
+    [SerializeField] private float _combatTextFontSizePx = 40f;
     [Tooltip("통상 데미지 색")]
     [SerializeField] private Color _damageColor = new Color(1f, 0.95f, 0.85f, 1f);
     [Tooltip("크리티컬 데미지 색")]
     [SerializeField] private Color _criticalColor = new Color(1f, 0.72f, 0.2f, 1f);
     [Tooltip("회피(AVOID) 색")]
     [SerializeField] private Color _avoidColor = new Color(0.7f, 0.85f, 1f, 1f);
+    [Tooltip("켜면 전투 문자가 사라지지 않고 남는다. Hierarchy 에서 확인할 때만 쓴다")]
+    [SerializeField] private bool _combatTextDebugHold = false;
+    [Tooltip("켜면 문자 뒤에 반투명 빨간 상자를 깔아 캔버스가 그려지는지 확인한다")]
+    [SerializeField] private bool _combatTextDebugBackground = false;
 
 
     public static BattleManager BattleInstance;
@@ -651,10 +655,15 @@ public class BattleManager : MonoBehaviour
             _color = _avoidColor;
         }
 
-        float _size = _result.Critical ? _combatTextFontSize * 1.3f : _combatTextFontSize;
+        float _size = _result.Critical ? _combatTextFontSizePx * 1.3f : _combatTextFontSizePx;
+
+        Debug.Log($"BattleManager : 전투 문자 — {_target.Stat.Name} 위에 \"{_body}\" 표시");
+
+        FloatingCombatText.DebugHold = _combatTextDebugHold;
+        FloatingCombatText.DebugBackground = _combatTextDebugBackground;
 
         FloatingCombatText.Show(_target.transform, _body, _color,
-                                _size, _combatTextDuration, _combatTextRise);
+                                _size, _combatTextDuration, _combatTextRisePx);
     }
 
     // 기본 공격 판정: 명중/회피 → 방어력 반영 데미지 → 속성 상성 → 크리티컬 순으로 계산한다.

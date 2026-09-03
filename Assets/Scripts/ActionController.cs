@@ -167,16 +167,23 @@ public class ActionController : MonoBehaviour
         }
     }
 
+    private bool _encounterTriggered = false; // 씬 전환이 끝나기 전에 트리거가 중복 발동하는 것을 방지 (TC 35)
+
     private void OnTriggerEnter(Collider other)
     {
-        
+        if (_encounterTriggered)
+        {
+            return;
+        }
+
         if (other.gameObject.CompareTag("Monster"))
         {
             if (SceneManager.GetActiveScene().name == "Field")
             {
-                SceneManager.LoadScene(3);
+                _encounterTriggered = true;
+                SceneManager.LoadScene("CommandBattle");
             }
-         
+
         }
     }
 

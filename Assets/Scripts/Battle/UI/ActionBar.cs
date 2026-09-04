@@ -55,6 +55,11 @@ public class ActionBar : MonoBehaviour
     private GameObject _ghostSlot;
     private int _projectedRow = -1;
 
+    // 예상 슬롯을 다시 계산하기 위해 지금 미리보기 중인 유닛과 딜레이를 기억한다.
+    // 큐가 바뀌면(유닛 사망 등) 예상 줄도 같이 움직여야 한다
+    private BattleUnit _previewActor;
+    private int _previewDelay;
+
     private bool _subscribed;
     private bool _warnedNoFactory;
 
@@ -168,6 +173,31 @@ public class ActionBar : MonoBehaviour
 
             SetSlotAt(slot, u);
         }
+    }
+
+    /// <summary>
+    /// 큐에서 유닛이 빠졌을 때(사망 등) 즉시 호출한다.
+    ///
+    /// 큐 이벤트만으로도 Render 가 불리지만, 이벤트를 놓친 경우에도 확실히 갱신되도록
+    /// 사망 처리에서 직접 호출한다. 예상 슬롯의 줄도 다시 계산해서, 앞에 있던 유닛이
+    /// 사라지면 예상 슬롯도 같이 위로 올라오게 한다.
+    /// </summary>
+    public void RefreshFromQueue()
+    {
+        if (BattleFlow.Instance == null) return;
+
+        List<BattleUnit> entries = new List<BattleUnit>(BattleFlow.Instance.Queue.Entries);
+
+        // 예상 슬롯의 줄을 새 큐 기준으로 다시 계산한다
+        if (HasGhost && _previewActor != null && _previewActor.IsAlive)
+        {
+            _projectedRow = ProjectedRowByAt(_previewActor, _previewActor.At + _previewDelay);
+            RefreshBadgePosition();
+        }
+
+        Render(entries);
+
+        Debug.Log($"[ActionBar] 큐 갱신 — 슬롯 {entries.Count}개, 예상 줄 {_projectedRow}");
     }
 
     private GameObject CreateQueueSlot(BattleUnit unit, int row)
@@ -301,6 +331,10 @@ public class ActionBar : MonoBehaviour
         }
 
         int delay = AT.Delay(actor, baseDelay);
+
+        _previewActor = actor;
+        _previewDelay = delay;
+
         ShowPreview(actor.Unit, delay, ProjectedRowByAt(actor, actor.At + delay));
     }
 
@@ -566,6 +600,8 @@ public class ActionBar : MonoBehaviour
     private void DestroyGhost()
     {
         _projectedRow = -1;
+        _previewActor = null;
+        _previewDelay = 0;
 
         if (_ghostSlot == null) return;
 

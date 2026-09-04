@@ -45,19 +45,16 @@ public class Member : MonoBehaviour, IPointerClickHandler
 
     public void _elementBackgroundSet()
     {
-        if (_characterComponent.Stat.Element == "fire")
-        {
-            _elementBackground.color = Color.red;
              
-        }
-        else if (_characterComponent.Stat.Element == "wind")
-        {
-            _elementBackground.color = Color.green;
-        }
-        else if (_characterComponent.Stat.Element == "water")
-        {
-            _elementBackground.color = Color.blue;
-        }
+        //}
+        //else if (_characterComponent.Stat.Element == "wind")
+        //{
+        //    _elementBackground.color = Color.green;
+        //}
+        //else if (_characterComponent.Stat.Element == "water")
+        //{
+        //    _elementBackground.color = Color.blue;
+        //}
 
         Color c = _elementBackground.color;
         c.a = 120 / 255f;

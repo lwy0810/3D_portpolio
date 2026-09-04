@@ -29,7 +29,7 @@ public class ActionBar : MonoBehaviour
     [Tooltip("배지의 PosX. 예상 슬롯 오른쪽에 오도록 잡는다")]
     [SerializeField] private float _badgePosX = 250f;
     [SerializeField] private float _badgeFontSize = 20f;
-    [SerializeField] private Color _badgeColor = new Color(1f, 0.78f, 0.28f);
+    [SerializeField] private Color _badgeColor = new Color(1f, 1f, 1f);
 
     [Header("예상 슬롯")]
     [Tooltip("행동 후 들어갈 자리에 슬롯을 미리 보여준다")]
@@ -335,7 +335,7 @@ public class ActionBar : MonoBehaviour
         // row 는 현재 캐릭터 슬롯이 아직 0줄에 있는 상태의 줄 번호다.
         // 턴이 넘어가면 전체가 한 줄 올라가므로 1-based 순서와 값이 같다.
         _badgeText.text = row >= 0
-            ? $"+{delay} AT\n<size=70%>{row}번째</size>"
+            ? $"+{delay} Delay"
             : $"+{delay} AT";
 
         _badgeRoot.SetActive(true);
@@ -491,6 +491,7 @@ public class ActionBar : MonoBehaviour
 
         _badgeText = _badgeRoot.AddComponent<TextMeshProUGUI>();
         _badgeText.fontSize = _badgeFontSize;
+        _badgeText.fontStyle = FontStyles.Bold;
         _badgeText.color = _badgeColor;
         _badgeText.alignment = TextAlignmentOptions.Left;
         _badgeText.enableWordWrapping = false;

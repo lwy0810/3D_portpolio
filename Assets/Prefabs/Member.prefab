@@ -1104,7 +1104,7 @@ GameObject:
   - component: {fileID: 7117770224822916021}
   - component: {fileID: 5991601603935624668}
   m_Layer: 5
-  m_Name: ElementBackground
+  m_Name: MemberImageBackground
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1150,7 +1150,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.5210495, b: 0.13679248, a: 0.3137255}
+  m_Color: {r: 1, g: 0.5210495, b: 0.13679248, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1

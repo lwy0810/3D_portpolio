@@ -1,8 +1,4 @@
 ﻿index,name,owner,type,power,costType,cost,castDelay,baseDelay,targetSide,targetShape,range,area,breakMult,effectIds,animTrigger,description
-1,이동,all,move,0,none,0,0,10,self,single,0,0,0,,,이동. BaseDelay 10
-2,통상공격,all,attack,100,none,0,0,20,enemy,single,2.5,0,1,,Attack,기본 공격. BaseDelay 20
-3,아이템,all,item,0,none,0,0,10,ally,single,3,0,0,,,아이템 사용. BaseDelay 10
-4,방어,all,guard,0,none,0,0,20,self,single,0,0,0,513,,1턴 방어 태세
 101,물살 베기,Ubi,craft,130,cp,20,0,20,enemy,single,2.5,0,1,,Attack,단일 물속성 베기
 102,조수 가르기,Ubi,craft,90,cp,30,0,25,enemy,circle,3,2.5,1.2,511,Attack,범위 공격 + 방어력 감소
 103,만조의 검,Ubi,scraft,320,cp,100,0,40,enemy,all,0,0,2,,MeleeAttack_TwoHanded,S크래프트. 적 전체

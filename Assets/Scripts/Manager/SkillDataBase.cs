@@ -52,7 +52,8 @@ public class SkillDataBase : MonoBehaviour
 
         IsLoaded = true;
 
-        Debug.Log($"[SkillDataBase] 스킬 {_skills.Count}건 / 효과 {_effects.Count}건 로드 완료");
+        Debug.Log($"[SkillDataBase] 스킬 {_skills.Count}건(기본 행동 4건 포함) / " +
+                  $"효과 {_effects.Count}건 로드 완료");
     }
 
     private void LoadEffects()
@@ -74,10 +75,75 @@ public class SkillDataBase : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 기본 행동(이동 · 통상공격 · 아이템 · 방어)은 CSV 가 아니라 코드에서 만든다.
+    /// BaseDelay 의 기준은 AT 클래스의 상수 하나뿐이고, 같은 값을 CSV 에 또 적어
+    /// 두 곳을 따로 관리하는 일을 없애기 위한 것이다.
+    /// 스킬(크래프트 · 아츠)은 그대로 CSV 가 정의한다.
+    /// </summary>
+    private void BuildBasicActions()
+    {
+        Move = new SkillData
+        {
+            Index = 1, Name = "이동", Owner = "all", Type = SkillType.Move,
+            Power = 0, CostType = CostType.None, Cost = 0,
+            CastDelay = 0, BaseDelay = AT.BaseMove,
+            TargetSide = TargetSide.Self, TargetShape = TargetShape.Single,
+            Description = "이동",
+        };
+
+        BasicAttack = new SkillData
+        {
+            Index = 2, Name = "통상공격", Owner = "all", Type = SkillType.Attack,
+            Power = 100, CostType = CostType.None, Cost = 0,
+            CastDelay = 0, BaseDelay = AT.BaseAttack,
+            TargetSide = TargetSide.Enemy, TargetShape = TargetShape.Single,
+            Range = 2.5f, BreakMult = 1f, AnimTrigger = "Attack",
+            Description = "기본 공격",
+        };
+
+        Item = new SkillData
+        {
+            Index = 3, Name = "아이템", Owner = "all", Type = SkillType.Item,
+            Power = 0, CostType = CostType.None, Cost = 0,
+            CastDelay = 0, BaseDelay = AT.BaseItem,
+            TargetSide = TargetSide.Ally, TargetShape = TargetShape.Single,
+            Range = 3f,
+            Description = "아이템 사용",
+        };
+
+        Guard = new SkillData
+        {
+            Index = 4, Name = "방어", Owner = "all", Type = SkillType.Guard,
+            Power = 0, CostType = CostType.None, Cost = 0,
+            CastDelay = 0, BaseDelay = AT.BaseGuard,
+            TargetSide = TargetSide.Self, TargetShape = TargetShape.Single,
+            EffectIds = new int[] { 513 },      // 방어력 상승
+            Description = "1턴 방어 태세",
+        };
+
+        Register(Move);
+        Register(BasicAttack);
+        Register(Item);
+        Register(Guard);
+    }
+
+    private void Register(SkillData s)
+    {
+        _skills[s.Index] = s;
+
+        if (!_byOwner.ContainsKey("all")) _byOwner["all"] = new List<SkillData>();
+        _byOwner["all"].Add(s);
+    }
+
     private void LoadSkills()
     {
         _skills.Clear();
         _byOwner.Clear();
+
+        // 기본 행동을 먼저 만든다. CSV 에 같은 index 가 있으면 중복 경고가 떠서
+        // 값이 두 곳에 생긴 것을 바로 알 수 있다
+        BuildBasicActions();
 
         CsvTable csv = CSVFileLoader.LoadTable(SkillFile);
         foreach (CsvTable.Row r in csv.Rows)
@@ -107,17 +173,7 @@ public class SkillDataBase : MonoBehaviour
                 }
             }
 
-            switch (s.Type)
-            {
-                case SkillType.Attack: if (BasicAttack == null) BasicAttack = s; break;
-                case SkillType.Move: if (Move == null) Move = s; break;
-                case SkillType.Item: if (Item == null) Item = s; break;
-                case SkillType.Guard: if (Guard == null) Guard = s; break;
-            }
         }
-
-        if (BasicAttack == null)
-            Debug.LogError("[SkillDataBase] type 이 attack 인 행이 없습니다. 통상공격을 만들 수 없습니다.");
     }
 
     // ── 조회 ────────────────────────────────────────────────

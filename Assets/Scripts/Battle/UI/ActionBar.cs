@@ -186,8 +186,8 @@ public class ActionBar : MonoBehaviour
         RectTransform rt = slot.GetComponent<RectTransform>();
         if (rt != null)
         {
-            rt.anchoredPosition = SlotPos(row) - new Vector2(_slideInFromX, 0f);
             rt.localScale = Vector3.one;
+            rt.anchoredPosition = SlotPos(row, rt, 1f) - new Vector2(_slideInFromX, 0f);
         }
 
         CanvasGroup cg = slot.GetComponent<CanvasGroup>();
@@ -211,7 +211,8 @@ public class ActionBar : MonoBehaviour
         if (HasGhost)
         {
             RectTransform grt = _ghostSlot.GetComponent<RectTransform>();
-            grt.anchoredPosition = Vector2.Lerp(grt.anchoredPosition, SlotPos(_projectedRow), t);
+            grt.anchoredPosition = Vector2.Lerp(grt.anchoredPosition,
+                                                SlotPos(_projectedRow, grt, grt.localScale.x), t);
             RefreshBadgePosition();
         }
     }
@@ -230,9 +231,13 @@ public class ActionBar : MonoBehaviour
 
             int row = i + RowShift(i);
 
-            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition, SlotPos(row), t);
+            // 배율을 먼저 맞추고, 그 배율에 맞는 왼쪽 맞춤 위치로 옮긴다.
+            // 순서를 바꾸면 커지는 동안 왼쪽 변이 흔들린다
             rt.localScale = Vector3.Lerp(rt.localScale,
                 Vector3.one * (row == 0 ? _factory.CurrentScale : 1f), t);
+
+            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition,
+                                               SlotPos(row, rt, rt.localScale.x), t);
         }
     }
 
@@ -249,7 +254,8 @@ public class ActionBar : MonoBehaviour
             if (rt == null) continue;
 
             int row = i + RowShift(i);
-            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition, SlotPos(row), t);
+            rt.anchoredPosition = Vector2.Lerp(rt.anchoredPosition,
+                                               SlotPos(row, rt, rt.localScale.x), t);
         }
     }
 
@@ -263,6 +269,13 @@ public class ActionBar : MonoBehaviour
     private Vector2 SlotPos(int row)
     {
         return _factory != null ? _factory.SlotAnchoredPosition(row)
+                                : new Vector2(0f, -row * SlotHeight);
+    }
+
+    /// <summary>배율이 반영된 슬롯 위치. 커진 슬롯도 왼쪽 변이 맞도록 X 를 보정한다.</summary>
+    private Vector2 SlotPos(int row, RectTransform rt, float scale)
+    {
+        return _factory != null ? _factory.SlotAnchoredPosition(row, rt, scale)
                                 : new Vector2(0f, -row * SlotHeight);
     }
 
@@ -527,7 +540,7 @@ public class ActionBar : MonoBehaviour
         if (created)
         {
             // 왼쪽에서 미끄러져 들어온다. 실제 이동은 AnimateLayout 이 담당
-            rt.anchoredPosition = SlotPos(row) - new Vector2(_slideInFromX, 0f);
+            rt.anchoredPosition = SlotPos(row, rt, 1f) - new Vector2(_slideInFromX, 0f);
         }
 
         rt.SetAsLastSibling();

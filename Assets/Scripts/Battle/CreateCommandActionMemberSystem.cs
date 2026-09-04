@@ -21,7 +21,17 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
     [Tooltip("바 기준 가로 오프셋")]
     [SerializeField] private float _slotOffsetX = 90f;
     [Tooltip("현재 차례 슬롯 확대 배율")]
-    [SerializeField] private float _currentScale = 1f;
+    [SerializeField] private float _currentScale = 1.12f;
+
+    [Header("슬롯 초상화 배경(MemberImageBackground)")]
+    [Tooltip("캐릭터 슬롯의 배경 스프라이트. Resources 폴더 기준 경로")]
+    [SerializeField] private string _characterFramePath = "Images/Mana_bar_edge";
+    [Tooltip("몬스터 슬롯의 배경 스프라이트. Resources 폴더 기준 경로")]
+    [SerializeField] private string _monsterFramePath = "Images/health_bar_edge";
+
+    // 한 번 불러온 스프라이트는 재사용한다
+    private Sprite _characterFrame;
+    private Sprite _monsterFrame;
 
     private readonly List<GameObject> _actionMemberlist = new List<GameObject>();
     private readonly List<string> _characterNames = new List<string>();
@@ -182,10 +192,12 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
             RectTransform rt = slot.GetComponent<RectTransform>();
             if (rt == null) continue;
 
-            if (applyPosition)
-                rt.anchoredPosition = _basePos + new Vector2(_slotOffsetX, -row * _slotHeight);
+            float scale = row == 0 ? _currentScale : 1f;
 
-            rt.localScale = Vector3.one * (row == 0 ? _currentScale : 1f);
+            rt.localScale = Vector3.one * scale;
+
+            if (applyPosition)
+                rt.anchoredPosition = SlotAnchoredPosition(row, rt, scale);
             rt.SetSiblingIndex(row);
 
             row++;
@@ -206,10 +218,39 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
         _baseCaptured = true;
     }
 
-    /// <summary>슬롯 1개의 화면상 위치. 딜레이 배지를 붙일 때 쓴다.</summary>
+    /// <summary>슬롯 1개의 화면상 위치. 배율 보정이 없는 기준값이다. 딜레이 배지의 Y 에 쓴다.</summary>
     public Vector2 SlotAnchoredPosition(int row)
     {
         return _basePos + new Vector2(_slotOffsetX, -row * _slotHeight);
+    }
+
+    /// <summary>
+    /// 왼쪽 맞춤이 적용된 슬롯 위치.
+    ///
+    /// 현재 턴 슬롯은 배율이 커지는데, 피벗이 가운데면 커진 만큼 양쪽으로 퍼져서
+    /// 왼쪽 변이 다른 슬롯보다 튀어나온다. 배율에 맞춰 X 를 보정해 모든 슬롯의
+    /// 왼쪽 변이 같은 X 에 오게 한다. (파워포인트의 왼쪽 맞춤과 같은 결과)
+    /// </summary>
+    public Vector2 SlotAnchoredPosition(int row, RectTransform rt, float scale)
+    {
+        Vector2 pos = SlotAnchoredPosition(row);
+        pos.x += LeftAlignOffsetX(rt, scale);
+        return pos;
+    }
+
+    /// <summary>
+    /// 왼쪽 변을 고정하기 위해 X 에 더할 값.
+    ///
+    ///   왼쪽 변 = x - pivot.x × width × scale
+    ///
+    /// 이 값이 배율 1 일 때와 같아야 하므로 x 에 pivot.x × width × (scale - 1) 을 더한다.
+    /// 피벗이 왼쪽(0)이면 0 이 되어 아무 것도 바뀌지 않는다.
+    /// </summary>
+    public float LeftAlignOffsetX(RectTransform rt, float scale)
+    {
+        if (rt == null) return 0f;
+
+        return rt.pivot.x * rt.rect.width * (scale - 1f);
     }
 
     // ── 초상화 · 속성색 ─────────────────────────────────────
@@ -232,11 +273,59 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
             {
                 img.sprite = sprite;
             }
+            else if (img.name == "MemberImageBackground")
+            {
+                ApplyFrame(img, _unit);
+            }
             else if (img.name == "ElementBackground")
             {
                 img.color = SlotBackgroundColor();
             }
         }
+    }
+
+    /// <summary>
+    /// 초상화 배경 스프라이트를 유닛 종류에 맞춰 바꾼다.
+    /// 캐릭터는 Mana_bar_edge, 몬스터는 health_bar_edge 를 쓴다.
+    /// </summary>
+    private void ApplyFrame(Image img, Unit _unit)
+    {
+        Sprite frame = FrameSprite(_unit);
+        if (frame == null) return;
+
+        img.sprite = frame;
+
+        // 9분할 테두리가 있는 스프라이트만 Sliced 로 둔다.
+        // 테두리가 없는데 Sliced 로 두면 Unity 가 경고를 내고 늘어나지 않는다
+        img.type = frame.border == Vector4.zero ? Image.Type.Simple : Image.Type.Sliced;
+
+        // 색이 곱해져 스프라이트가 어둡게 보이는 것을 막는다
+        img.color = Color.white;
+    }
+
+    private Sprite FrameSprite(Unit _unit)
+    {
+        if (_unit is Monster)
+        {
+            if (_monsterFrame == null) _monsterFrame = LoadSprite(_monsterFramePath);
+            return _monsterFrame;
+        }
+
+        if (_characterFrame == null) _characterFrame = LoadSprite(_characterFramePath);
+        return _characterFrame;
+    }
+
+    private static Sprite LoadSprite(string path)
+    {
+        Sprite sprite = Resources.Load<Sprite>(path);
+
+        if (sprite == null)
+        {
+            Debug.LogWarning($"[ActionMember] Resources/{path} 을 찾을 수 없습니다. " +
+                             "경로와 텍스처 타입(Sprite (2D and UI))을 확인하세요.");
+        }
+
+        return sprite;
     }
 
     /// <summary>슬롯 배경색. 속성 구분을 없앴으므로 모든 슬롯이 같은 색을 쓴다.</summary>

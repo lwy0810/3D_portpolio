@@ -331,6 +331,7 @@ public class ActionBar : MonoBehaviour
         else DestroyGhost();
 
         EnsureBadge();
+        ApplyBadgeStyle();
 
         // row 는 현재 캐릭터 슬롯이 아직 0줄에 있는 상태의 줄 번호다.
         // 턴이 넘어가면 전체가 한 줄 올라가므로 1-based 순서와 값이 같다.
@@ -486,20 +487,34 @@ public class ActionBar : MonoBehaviour
         _badgeRoot = new GameObject("DelayBadge", typeof(RectTransform));
         _badgeRoot.transform.SetParent(BarRoot, false);
 
+        _badgeText = _badgeRoot.AddComponent<TextMeshProUGUI>();
         RectTransform rt = _badgeRoot.GetComponent<RectTransform>();
         rt.sizeDelta = new Vector2(120f, 56f);
-
-        _badgeText = _badgeRoot.AddComponent<TextMeshProUGUI>();
+        _badgeText.color = _badgeColor;
         _badgeText.fontSize = _badgeFontSize;
         _badgeText.fontStyle = FontStyles.Bold;
-        _badgeText.color = _badgeColor;
+        
         _badgeText.alignment = TextAlignmentOptions.Left;
         _badgeText.enableWordWrapping = false;
         _badgeText.raycastTarget = false;
 
+        ApplyBadgeStyle();
+
         if (_badgeText.font == null)
             Debug.LogWarning("[ActionBar] TMP 기본 폰트가 없습니다. " +
                              "Window > TextMeshPro > Import TMP Essential Resources 를 실행하세요.");
+    }
+
+    /// <summary>
+    /// 색과 크기는 배지를 띄울 때마다 다시 적용한다.
+    /// 만들 때 한 번만 넣으면 인스펙터에서 값을 바꿔도 이미 만들어진 배지에는 반영되지 않는다.
+    /// </summary>
+    private void ApplyBadgeStyle()
+    {
+        if (_badgeText == null) return;
+
+        _badgeText.fontSize = _badgeFontSize;
+        _badgeText.color = _badgeColor;
     }
 
     private void RefreshBadgePosition()

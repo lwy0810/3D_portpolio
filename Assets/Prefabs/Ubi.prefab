@@ -2585,8 +2585,8 @@ GameObject:
   - component: {fileID: 2173869352015929127}
   - component: {fileID: 2441948596721625540}
   - component: {fileID: 6685844491443002302}
-  - component: {fileID: 8689126345568978987}
   - component: {fileID: 2718644761737436499}
+  - component: {fileID: 1365499313145724871}
   m_Layer: 0
   m_Name: Ubi
   m_TagString: Player
@@ -2724,7 +2724,7 @@ CharacterController:
   m_Radius: 0.5
   m_SlopeLimit: 45
   m_StepOffset: 0.3
-  m_SkinWidth: 0.08
+  m_SkinWidth: 0.05
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0.8, z: 0}
 --- !u!114 &6685844491443002302
@@ -2742,19 +2742,6 @@ MonoBehaviour:
   _weaponPrefab: {fileID: 1777591198242490, guid: d1672804ca257df4eaa5dc155105c099, type: 3}
   _rightHandPrefab: {fileID: 7342982742324279800}
   _fieldMember: {fileID: 38397168726473341, guid: e0b38cee5438bbe418c50ce9f7af7295, type: 3}
---- !u!114 &8689126345568978987
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3269564994144862299}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 551616f85515dcc4e89d709cd4abbabb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _speed2: 1
 --- !u!54 &2718644761737436499
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -2782,6 +2769,28 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &1365499313145724871
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3269564994144862299}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 551616f85515dcc4e89d709cd4abbabb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActionController
+  _speed2: 1
+  _walkSpeed: 2
+  _runSpeed: 5
+  _gravity: -9.8
+  _groundStick: -2
+  _maxFallSpeed: 50
+  _snapToGroundOnStart: 1
+  _snapRayUp: 2
+  _snapRayDown: 50
+  _logGroundGap: 1
 --- !u!1 &3362975045027092100
 GameObject:
   m_ObjectHideFlags: 0

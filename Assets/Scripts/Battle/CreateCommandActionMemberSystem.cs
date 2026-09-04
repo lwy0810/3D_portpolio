@@ -28,6 +28,16 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
     [SerializeField] private string _characterFramePath = "Images/Mana_bar_edge";
     [Tooltip("몬스터 슬롯의 배경 스프라이트. Resources 폴더 기준 경로")]
     [SerializeField] private string _monsterFramePath = "Images/health_bar_edge";
+    [Tooltip("배경 스프라이트에 곱해지는 색. 흰색이면 스프라이트 원본 색으로 보인다")]
+    [SerializeField] private Color _frameTint = new Color(1f, 1f, 1f, 1f);
+
+    // 프리팹의 초상화 배경 오브젝트 이름. 이름이 조금 달라도 찾도록 후보를 둔다
+    private static readonly string[] FrameImageNames =
+    {
+        "MemberImageBackground",
+        "MemberImageBg",
+        "MemberImageBG",
+    };
 
     // 한 번 불러온 스프라이트는 재사용한다
     private Sprite _characterFrame;
@@ -265,6 +275,8 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
 
         Image[] images = _actionMember.GetComponentsInChildren<Image>(true);
 
+        bool frameApplied = false;
+
         for (int i = 0; i < images.Length; i++)
         {
             Image img = images[i];
@@ -273,15 +285,28 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
             {
                 img.sprite = sprite;
             }
-            else if (img.name == "MemberImageBackground")
+            else if (IsFrameImage(img.name))
             {
                 ApplyFrame(img, _unit);
-            }
-            else if (img.name == "ElementBackground")
-            {
-                img.color = SlotBackgroundColor();
+                frameApplied = true;
             }
         }
+
+        if (!frameApplied)
+        {
+            Debug.LogWarning("[ActionMember] 초상화 배경 이미지를 찾지 못했습니다. " +
+                             $"프리팹의 자식 이름을 확인하세요 (찾는 이름 : {string.Join(" / ", FrameImageNames)})");
+        }
+    }
+
+    private static bool IsFrameImage(string name)
+    {
+        for (int i = 0; i < FrameImageNames.Length; i++)
+        {
+            if (name == FrameImageNames[i]) return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -299,8 +324,8 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
         // 테두리가 없는데 Sliced 로 두면 Unity 가 경고를 내고 늘어나지 않는다
         img.type = frame.border == Vector4.zero ? Image.Type.Simple : Image.Type.Sliced;
 
-        // 색이 곱해져 스프라이트가 어둡게 보이는 것을 막는다
-        img.color = Color.white;
+        // 프리팹에 남아 있던 색(주황 반투명)이 곱해져 스프라이트가 물들지 않게 한다
+        img.color = _frameTint;
     }
 
     private Sprite FrameSprite(Unit _unit)
@@ -326,14 +351,6 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
         }
 
         return sprite;
-    }
-
-    /// <summary>슬롯 배경색. 속성 구분을 없앴으므로 모든 슬롯이 같은 색을 쓴다.</summary>
-    public static Color SlotBackgroundColor()
-    {
-        Color c = Color.gray;
-        c.a = 120 / 255f;
-        return c;
     }
 
     // ── 연출 ────────────────────────────────────────────────

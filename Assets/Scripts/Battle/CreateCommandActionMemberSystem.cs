@@ -21,7 +21,7 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
     [Tooltip("바 기준 가로 오프셋")]
     [SerializeField] private float _slotOffsetX = 90f;
     [Tooltip("현재 차례 슬롯 확대 배율")]
-    [SerializeField] private float _currentScale = 1.12f;
+    [SerializeField] private float _currentScale = 1f;
 
     private readonly List<GameObject> _actionMemberlist = new List<GameObject>();
     private readonly List<string> _characterNames = new List<string>();

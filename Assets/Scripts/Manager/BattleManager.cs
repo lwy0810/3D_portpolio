@@ -723,8 +723,10 @@ public class BattleManager : MonoBehaviour
         bool isCritical = UnityEngine.Random.value < Mathf.Clamp01(_attacker.Critical);
         if (isCritical)
         {
-            float critMult = _attacker.CriticalDmg > 0f ? _attacker.CriticalDmg : 1.5f;
-            baseDamage *= critMult;
+            // CriticalDmg 는 "추가 배율"이다. 0.5 면 1 + 0.5 = 1.5배가 된다.
+            // 예전에는 이 값을 그대로 곱해서 크리티컬이 데미지를 절반으로 줄였다.
+            float bonus = _attacker.CriticalDmg > 0f ? _attacker.CriticalDmg : 0.5f;
+            baseDamage *= 1f + bonus;
         }
         result.Critical = isCritical;
 

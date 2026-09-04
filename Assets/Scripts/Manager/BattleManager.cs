@@ -50,6 +50,10 @@ public class BattleManager : MonoBehaviour
     [Tooltip("공격 동작 전체 길이(초). 이 시간이 지나면 원위치로 복귀한다")]
     [SerializeField] private float _attackAnimSeconds = 1.5f;
 
+    [Header("명중 판정")]
+    [Tooltip("3단 판정의 DEX 대 AGL 계수. 명중률 = 1 - AGL / (계수 x DEX). 낮추면 회피가 자주 나온다")]
+    [SerializeField] private float _dexAglCoefficient = 5f;
+
     [Header("전투 문자(데미지/회피) UI")]
     [Tooltip("피격 지점 위에 문자가 떠 있는 시간(초)")]
     [SerializeField] private float _combatTextDuration = 1.0f;
@@ -125,10 +129,15 @@ public class BattleManager : MonoBehaviour
         public bool Hit;
         public bool Critical;
         public int Amount;
+
+        // 빗나감(Miss)과 회피(Evade)를 구분해 UI 문자를 다르게 띄운다
+        public HitResult Judge;
     }
 
     void Awake()
     {
+        SkillResolver.DexAglCoefficient = _dexAglCoefficient;
+
         _createCommandActionMemberSystem = GetComponent<CreateCommandActionMemberSystem>();
         _createCommandBattleMemberSystem = GetComponent<CreateCommandBattleMemberSystem>();
 
@@ -687,7 +696,8 @@ public class BattleManager : MonoBehaviour
         }
         else
         {
-            _body = "AVOID";
+            // 대상이 피한 것과 공격이 빗나간 것을 구분해서 보여준다
+            _body = _result.Judge == HitResult.Evade ? "AVOID" : "MISS";
             _color = _avoidColor;
         }
 
@@ -708,8 +718,16 @@ public class BattleManager : MonoBehaviour
     {
         DamageResult result = new DamageResult();
 
-        float hitChance = Mathf.Clamp(_attacker.Hit - _defender.Avoid, 0.05f, 1f);
-        if (UnityEngine.Random.value > hitChance)
+        // 명중 판정과 데미지 공식을 SkillResolver 와 공유한다.
+        // 예전에는 이 메서드가 자체 공식을 갖고 있어서 스킬 쪽과 값이 달랐다
+        result.Judge = SkillResolver.RollHitRaw(
+            _attacker.Hit, _defender.Avoid,
+            _attacker.Dex, _defender.Agl,
+            _attacker.Critical,
+            false,      // 통상공격은 확정 명중이 아니다
+            false);     // 브레이크 상태는 아직 기본 공격에 반영하지 않는다
+
+        if (result.Judge == HitResult.Miss || result.Judge == HitResult.Evade)
         {
             result.Hit = false;
             result.Amount = 0;
@@ -717,20 +735,15 @@ public class BattleManager : MonoBehaviour
         }
 
         result.Hit = true;
+        result.Critical = result.Judge == HitResult.Critical;
 
-        float baseDamage = Mathf.Max(1, _attacker.Atk - _defender.Def);
+        // 통상공격은 위력 100%
+        result.Amount = SkillResolver.CalcDamageRaw(
+            _attacker.Str, _defender.Def, 100,
+            result.Critical, _attacker.CriticalDmg,
+            false,      // S크래프트 아님
+            false);     // 브레이크 아님
 
-        bool isCritical = UnityEngine.Random.value < Mathf.Clamp01(_attacker.Critical);
-        if (isCritical)
-        {
-            // CriticalDmg 는 "추가 배율"이다. 0.5 면 1 + 0.5 = 1.5배가 된다.
-            // 예전에는 이 값을 그대로 곱해서 크리티컬이 데미지를 절반으로 줄였다.
-            float bonus = _attacker.CriticalDmg > 0f ? _attacker.CriticalDmg : 0.5f;
-            baseDamage *= 1f + bonus;
-        }
-        result.Critical = isCritical;
-
-        result.Amount = Mathf.Max(1, Mathf.RoundToInt(baseDamage));
         return result;
     }
 
@@ -789,7 +802,7 @@ public class BattleManager : MonoBehaviour
         }
         else
         {
-            Debug.Log($"{_monster.Stat.Name}의 공격이 빗나갔습니다.");
+            Debug.Log($"{_monster.Stat.Name}의 공격 — {(result.Judge == HitResult.Evade ? "회피됨" : "빗나감")}");
         }
 
         // 사망 처리보다 먼저 띄운다. 죽은 유닛은 대열에서 빠지므로 위치를 잡을 수 없다
@@ -843,6 +856,10 @@ public class BattleManager : MonoBehaviour
         {
             BattleUnit _bu = _flow.Queue.Find(_unit);
             if (_bu != null) _flow.Queue.Remove(_bu);
+
+            // 액션 바를 바로 갱신한다. 큐 이벤트만 믿으면 구독이 끊긴 경우
+            // 다음 턴이 시작될 때까지 아래 슬롯들이 그대로 남는다
+            if (_actionBar != null) _actionBar.RefreshFromQueue();
         }
 
         StartCoroutine(DelayedDestroy(_unit.gameObject, 1.0f));
@@ -944,7 +961,8 @@ public class BattleManager : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < maxSeconds)
         {
-            if (_defender == null) yield break; // 연출 중 대상 파괴 (TC 126)
+            // 연출 중 대상 · 공격자 파괴, 전투 종료 (TC 126)
+            if (_attacker == null || _defender == null || _isBattleOver) yield break;
 
             Vector3 endPos = _defender.transform.position + _approachDir * approachDistance;
             Vector3 toTarget = endPos - _attacker.transform.position;
@@ -990,12 +1008,18 @@ public class BattleManager : MonoBehaviour
         // 남은 공격 동작을 마친다
         yield return new WaitForSeconds(Mathf.Max(0f, _attackAnimSeconds - _attackImpactDelay));
 
+        // 마지막 몬스터를 쓰러뜨렸으면 전투가 끝나고 곧 씬이 바뀐다.
+        // 파괴될 오브젝트를 계속 움직이면 예외가 난다
+        if (_attacker == null || _isBattleOver) yield break;
+
         // 원위치로 복귀
         PlayRun(_animator, _useParams, moveSpeedUnits);
 
         elapsed = 0f;
         while (elapsed < maxSeconds)
         {
+            if (_attacker == null || _isBattleOver) yield break;
+
             Vector3 toStart = StartPos - _attacker.transform.position;
             toStart.y = 0f;
 
@@ -1013,6 +1037,8 @@ public class BattleManager : MonoBehaviour
         }
 
         yield return new WaitForSeconds(0.1f);
+
+        if (_attacker == null) yield break;
 
         // 원래 보고 있던 방향으로 되돌린다. 몬스터는 이때 캐릭터를 마주보게 된다
         _attacker.transform.rotation = StartRot;
@@ -1247,7 +1273,7 @@ public class BattleManager : MonoBehaviour
         }
         else
         {
-            Debug.Log($"{_attacker.Stat.Name}의 공격이 빗나갔습니다.");
+            Debug.Log($"{_attacker.Stat.Name}의 공격 — {(result.Judge == HitResult.Evade ? "회피됨" : "빗나감")}");
         }
 
         // 사망 처리보다 먼저 띄운다. 죽은 유닛은 대열에서 빠지므로 위치를 잡을 수 없다

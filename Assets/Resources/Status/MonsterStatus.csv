@@ -1,2 +1,2 @@
-﻿index,name,category,lv,hp,maxHp,ep,sp,atk,def,speed,avoid,cri,experience,criDmg,hit,ats,adf,dex,agl,maxBreak
-1,Bear,monster,1,1000,1000,100,100,30,40,30,0,0,1000,0.5,0,20,30,14,6,300
+﻿index,name,category,lv,hp,maxHp,ep,sp,str,def,speed,avoid,cri,experience,criDmg,hit,ats,adf,dex,agl,maxBreak
+1,Bear,monster,1,1000,1000,100,100,100,40,30,0,0,1000,0.5,0,20,30,14,6,300

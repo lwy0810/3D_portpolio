@@ -3,7 +3,7 @@
 512,debuff,Speed,percent,-20,3,0.5,속도 20% 감소 3턴
 513,buff,Def,percent,30,2,1,방어력 30% 상승 2턴
 514,buff,Speed,percent,25,3,1,속도 25% 상승 3턴
-515,buff,Atk,percent,20,3,1,공격력 20% 상승 3턴
+515,buff,Str,percent,20,3,1,공격력 20% 상승 3턴
 516,buff,Ats,percent,20,3,1,아츠 공격력 20% 상승 3턴
 521,ailment,Stun,flat,0,1,0.4,기절 1턴
 522,ailment,Freeze,flat,0,2,0.35,동결 2턴

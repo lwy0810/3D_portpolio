@@ -42,7 +42,6 @@ public class SkillData
     public float Area;              // 범위 반경 · 폭
 
     public float BreakMult;         // 브레이크 데미지 배율
-    public int Unbalance;           // 언밸런스 보너스 %p
 
     public int[] EffectIds;         // SkillEffect.csv 참조. '|' 구분
     public string AnimTrigger;
@@ -80,7 +79,6 @@ public class SkillData
         s.Area = r.GetFloat("area");
 
         s.BreakMult = r.GetFloat("breakMult", 1f);
-        s.Unbalance = r.GetInt("unbalance");
 
         s.EffectIds = r.GetIntList("effectIds");
         s.AnimTrigger = r.GetString("animTrigger");

@@ -12,7 +12,6 @@ public class TargetResult
     public int Heal;                // 최종 회복량
     public int BreakDamage;
     public bool Broken;             // 이 타격으로 브레이크 진입
-    public bool Unbalanced;
     public bool Died;
 
     public readonly List<SkillEffect> AppliedEffects = new List<SkillEffect>();

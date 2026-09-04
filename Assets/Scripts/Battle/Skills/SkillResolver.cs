@@ -121,10 +121,6 @@ public static class SkillResolver
                 tr.Broken = t.AddBreakDamage(tr.BreakDamage);
             }
 
-            // ── 언밸런스 ────────────────────────────────────
-            tr.Unbalanced = tr.Hit == HitResult.Critical ||
-                            Random.value < skill.Unbalance / 100f;
-
             // ── 부가 효과 ───────────────────────────────────
             ApplyEffects(actor, t, skill, tr);
 

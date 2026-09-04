@@ -394,7 +394,7 @@ public class BattleFlow : MonoBehaviour
             CastDelay = 0, BaseDelay = src.BaseDelay,
             TargetSide = src.TargetSide, TargetShape = src.TargetShape,
             Range = src.Range, Area = src.Area,
-            BreakMult = src.BreakMult, Unbalance = src.Unbalance,
+            BreakMult = src.BreakMult,
             EffectIds = src.EffectIds, AnimTrigger = src.AnimTrigger,
             Description = src.Description
         };

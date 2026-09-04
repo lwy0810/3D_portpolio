@@ -389,7 +389,7 @@ public class BattleFlow : MonoBehaviour
         SkillData copy = new SkillData
         {
             Index = src.Index, Name = src.Name, Owner = src.Owner, Type = src.Type,
-            Element = src.Element, Power = src.Power,
+            Power = src.Power,
             CostType = CostType.None, Cost = 0,
             CastDelay = 0, BaseDelay = src.BaseDelay,
             TargetSide = src.TargetSide, TargetShape = src.TargetShape,

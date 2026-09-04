@@ -21,7 +21,6 @@ Windows 의 Excel 과 메모장은 BOM 이 없으면 파일을 CP949 로 오해�
 |---|---:|
 `SkillData.csv` | 242자 |
 `SkillEffect.csv` | 64자 |
-`ElementChart.csv` | 0자 |
 `CharacterStatus.csv` | 0자 |
 `MonsterStatus.csv` | 0자 |
 

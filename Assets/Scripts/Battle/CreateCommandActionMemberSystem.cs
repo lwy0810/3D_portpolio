@@ -234,25 +234,15 @@ public class CreateCommandActionMemberSystem : MonoBehaviour
             }
             else if (img.name == "ElementBackground")
             {
-                img.color = ElementColor(_unit.Stat.Element);
+                img.color = SlotBackgroundColor();
             }
         }
     }
 
-    /// <summary>속성별 배경색. 색만 담당하고 데미지 상성은 ElementChart 가 본다.</summary>
-    public static Color ElementColor(string element)
+    /// <summary>슬롯 배경색. 속성 구분을 없앴으므로 모든 슬롯이 같은 색을 쓴다.</summary>
+    public static Color SlotBackgroundColor()
     {
-        Color c;
-
-        switch (element)
-        {
-            case "fire": c = Color.red; break;
-            case "wind": c = Color.green; break;
-            case "water": c = Color.blue; break;
-            case "earth": c = new Color(0.75f, 0.55f, 0.2f); break;
-            default: c = Color.gray; break;
-        }
-
+        Color c = Color.gray;
         c.a = 120 / 255f;
         return c;
     }

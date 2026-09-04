@@ -15,7 +15,6 @@ public class TargetResult
     public bool Unbalanced;
     public bool Died;
 
-    public float ElementMultiplier = 1f;
     public readonly List<SkillEffect> AppliedEffects = new List<SkillEffect>();
 
     public bool Landed => Hit == HitResult.Hit || Hit == HitResult.Critical;

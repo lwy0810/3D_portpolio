@@ -25,7 +25,6 @@ public class SkillData
     public string Name;
     public string Owner;            // 캐릭터 이름 또는 "all"
     public SkillType Type;
-    public string Element;          // fire / water / wind / earth / none
 
     public int Power;               // 위력 %. 100 = 공격력 그대로
     public CostType CostType;
@@ -67,7 +66,6 @@ public class SkillData
         s.Name = r.GetString("name");
         s.Owner = r.GetString("owner", "all");
         s.Type = ParseType(r.GetString("type", "attack"));
-        s.Element = r.GetString("element", "none");
 
         s.Power = r.GetInt("power");
         s.CostType = ParseCost(r.GetString("costType", "none"));

@@ -119,24 +119,13 @@ public class BattleManager : MonoBehaviour
 
     // 기본 공격 데미지 계산 결과. 스킬/ATB 시스템(설계 완료·미구현)의 SkillResolver 공식과는
     // 별개로, 커맨드 배틀(기본 공격)만을 위한 단순화된 버전이다.
+    // 속성 상성은 쓰지 않는다.
     private struct DamageResult
     {
         public bool Hit;
         public bool Critical;
         public int Amount;
     }
-
-    // 속성 상성표. 스킬 시스템 쪽 ElementChart.csv 가 만들어지기 전까지 쓰는 경량 버전.
-    private static readonly Dictionary<(string atk, string def), float> _elementChart =
-        new Dictionary<(string, string), float>
-    {
-        { ("fire", "wind"), 1.5f },
-        { ("wind", "water"), 1.5f },
-        { ("water", "fire"), 1.5f },
-        { ("wind", "fire"), 0.5f },
-        { ("water", "wind"), 0.5f },
-        { ("fire", "water"), 0.5f },
-    };
 
     void Awake()
     {
@@ -713,8 +702,8 @@ public class BattleManager : MonoBehaviour
                                 _size, _combatTextDuration, _combatTextRisePx);
     }
 
-    // 기본 공격 판정: 명중/회피 → 방어력 반영 데미지 → 속성 상성 → 크리티컬 순으로 계산한다.
-    // (TC 128 방어력, 130 크리티컬, 131 명중/회피, 132 속성 상성)
+    // 기본 공격 판정: 명중/회피 → 방어력 반영 데미지 → 크리티컬 순으로 계산한다.
+    // (TC 128 방어력, 130 크리티컬, 131 명중/회피)
     private DamageResult ResolveAttack(Stat _attacker, Stat _defender)
     {
         DamageResult result = new DamageResult();
@@ -730,11 +719,6 @@ public class BattleManager : MonoBehaviour
         result.Hit = true;
 
         float baseDamage = Mathf.Max(1, _attacker.Atk - _defender.Def);
-
-        if (_elementChart.TryGetValue((_attacker.Element, _defender.Element), out float chartMult))
-        {
-            baseDamage *= chartMult;
-        }
 
         bool isCritical = UnityEngine.Random.value < Mathf.Clamp01(_attacker.Critical);
         if (isCritical)

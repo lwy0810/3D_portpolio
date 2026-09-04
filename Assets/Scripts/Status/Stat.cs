@@ -17,7 +17,6 @@ public class Stat
     private string _leader;
     private string _name;
     private string _category;
-    private string _element;
     private int _level;
 
     // ── 자원 ────────────────────────────────────────────────
@@ -54,7 +53,6 @@ public class Stat
     public string Leader { get => _leader; set { if (SetField(ref _leader, value)) Notify(); } }
     public string Name { get => _name; set { if (SetField(ref _name, value)) Notify(); } }
     public string Category { get => _category; set { if (SetField(ref _category, value)) Notify(); } }
-    public string Element { get => _element; set { if (SetField(ref _element, value)) Notify(); } }
     public int Level { get => _level; set { if (SetField(ref _level, value)) Notify(); } }
 
     public int Hp { get => _hp; set { if (SetField(ref _hp, value)) Notify(); } }

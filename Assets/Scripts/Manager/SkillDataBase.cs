@@ -13,7 +13,6 @@ public class SkillDataBase : MonoBehaviour
 
     private const string SkillFile = "SkillData";
     private const string EffectFile = "SkillEffect";
-    private const string ElementFile = "ElementChart";
 
     private readonly Dictionary<int, SkillData> _skills = new Dictionary<int, SkillData>();
     private readonly Dictionary<int, SkillEffect> _effects = new Dictionary<int, SkillEffect>();
@@ -50,12 +49,10 @@ public class SkillDataBase : MonoBehaviour
 
         LoadEffects();
         LoadSkills();
-        ElementChart.Load(CSVFileLoader.LoadTable(ElementFile));
 
         IsLoaded = true;
 
-        Debug.Log($"[SkillDataBase] 스킬 {_skills.Count}건 / 효과 {_effects.Count}건 로드 완료" +
-                  $" (속성표 {(ElementChart.IsLoaded ? "OK" : "없음")})");
+        Debug.Log($"[SkillDataBase] 스킬 {_skills.Count}건 / 효과 {_effects.Count}건 로드 완료");
     }
 
     private void LoadEffects()

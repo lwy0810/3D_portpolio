@@ -108,8 +108,7 @@ public static class SkillResolver
             }
 
             // ── 데미지 ──────────────────────────────────────
-            tr.ElementMultiplier = ElementChart.Multiplier(skill.Element, t.Stat.Element);
-            tr.Damage = CalcDamage(actor, t, skill, tr.Hit == HitResult.Critical, tr.ElementMultiplier);
+            tr.Damage = CalcDamage(actor, t, skill, tr.Hit == HitResult.Critical);
 
             t.Stat.AddHp(-tr.Damage);
             dealtTotal += tr.Damage;
@@ -181,8 +180,7 @@ public static class SkillResolver
     // ── 데미지 · 회복 ───────────────────────────────────────
 
     public static int CalcDamage(BattleUnit actor, BattleUnit target, SkillData skill,
-                                 bool critical, float elementMult,
-                                 float qprm = 0f, float mult = 1f)
+                                 bool critical, float qprm = 0f, float mult = 1f)
     {
         float atkStat = skill.IsMagic ? actor.Effective("Ats") : actor.Effective("Atk");
         float defStat = skill.IsMagic ? target.Effective("Adf") : target.Effective("Def");
@@ -195,7 +193,7 @@ public static class SkillResolver
         if (critical) sprm += actor.Stat.CriticalDmg > 0f ? actor.Stat.CriticalDmg : 0.5f;
         if (skill.Type == SkillType.SCraft) sprm += 0.5f;
 
-        float modified = basis * ((1f + qprm) * mult + sprm) * elementMult;
+        float modified = basis * ((1f + qprm) * mult + sprm);
         if (target.IsBroken) modified *= BrokenTakenBonus;
 
         float variance = modified / 15f;
@@ -221,9 +219,8 @@ public static class SkillResolver
         if (basis < 1f) basis = 1f;
 
         float sprm = skill.Type == SkillType.SCraft ? 0.5f : 0f;
-        float m = ElementChart.Multiplier(skill.Element, target.Stat.Element);
 
-        return Mathf.Max(1, Mathf.RoundToInt(basis * (1f + sprm) * m));
+        return Mathf.Max(1, Mathf.RoundToInt(basis * (1f + sprm)));
     }
 
     // ── 부가 효과 ───────────────────────────────────────────

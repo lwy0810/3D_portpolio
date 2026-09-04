@@ -144,7 +144,6 @@ public class UnitCreateSystem : MonoBehaviour
 
         s.Name = row.GetString("name");
         s.Category = row.GetString("category", isCharacter ? "character" : "monster");
-        s.Element = row.GetString("element", "none");
         s.Level = row.GetInt("lv", 1);
 
         s.MaxHp = row.GetInt("maxHp", 1);

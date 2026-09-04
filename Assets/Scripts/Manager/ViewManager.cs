@@ -54,6 +54,8 @@ public class ViewManager : MonoBehaviour
         {
             if (Input.GetKeyDown(KeyCode.E))
             {
+                if (_fieldMenuView == null) return;
+
                 _fieldMenuView.gameObject.SetActive(true);
 
                 if (IsMenuActive == false)
@@ -70,20 +72,48 @@ public class ViewManager : MonoBehaviour
 
 
     // Common 
+    /// <summary>
+    /// 씬이 바뀔 때 뷰 참조를 다시 잡는다.
+    ///
+    /// ViewManager 는 DontDestroyOnLoad 로 살아남지만 인스펙터에 꽂아둔 뷰들은
+    /// 씬 안의 오브젝트다. 씬을 다시 불러오면 그 오브젝트가 파괴되어 참조가 죽고,
+    /// 건드리는 순간 NullReferenceException 이 난다. 그래서 매번 새로 찾는다.
+    /// </summary>
     private void UIConnect()
     {
-        if (SceneManager.GetActiveScene().name == "Field")
+        string _scene = SceneManager.GetActiveScene().name;
+
+        if (_scene == "Field")
         {
-            _keyInfoComponent = _keyInfo.GetComponent<KeyInfo>();
-            //_keyInfo = GameObject.Find("KeyInfoBar").GetComponent<KeyInfo>();
-            //_menuButtons = GameObject.Find("MenuButtons").GetComponent<MenuButtons>();
-            //_memberBar = GameObject.Find("MemberBar").GetComponent<MemberBar>();
-            //_characterView = GameObject.Find("CharacterView").GetComponent<CharacterView>();
+            _keyInfo = Reconnect(_keyInfo);
+            _characterView = Reconnect(_characterView);
+            _fieldMenuView = Reconnect(_fieldMenuView);
+            _memberBar = Reconnect(_memberBar);
+            _map = Reconnect(_map);
+            _systemView = Reconnect(_systemView);
+
+            _keyInfoComponent = _keyInfo;
         }
-        else if (SceneManager.GetActiveScene().name == "CommandBattle")
+        else if (_scene == "CommandBattle")
         {
-            _commandBattleView = GameObject.Find("CommandBattleView").GetComponent<CommandBattleView>();
+            _commandBattleView = Reconnect(_commandBattleView);
         }
+    }
+
+    /// <summary>
+    /// 참조가 살아 있으면 그대로 쓰고, 죽었으면 씬에서 다시 찾는다.
+    /// 비활성 오브젝트도 찾아야 하므로 Include 를 쓴다.
+    /// </summary>
+    private T Reconnect<T>(T current) where T : Component
+    {
+        if (current != null) return current;
+
+        T found = FindFirstObjectByType<T>(FindObjectsInactive.Include);
+
+        if (found == null)
+            Debug.LogWarning($"[ViewManager] {typeof(T).Name} 를 씬에서 찾지 못했습니다.");
+
+        return found;
     }
 
 
@@ -108,6 +138,12 @@ public class ViewManager : MonoBehaviour
 
     private void FieldUIShow(bool active)
     {
+        if (_keyInfo == null || _characterView == null)
+        {
+            Debug.LogWarning("[ViewManager] 필드 UI 참조가 없어 표시를 건너뜁니다.");
+            return;
+        }
+
         _keyInfo.gameObject.SetActive(active);
         //_menuButtons.gameObject.SetActive(active);
         //_memberBar.gameObject.SetActive(active);
@@ -116,7 +152,13 @@ public class ViewManager : MonoBehaviour
 
     public void CharacterViewShow()
     {
-        _keyInfoComponent.MouseLeftButtonColorReset();
+        if (_characterView == null || _keyInfo == null || _memberBar == null || _map == null)
+        {
+            Debug.LogWarning("[ViewManager] 필드 UI 참조가 없어 캐릭터 창을 열 수 없습니다.");
+            return;
+        }
+
+        if (_keyInfoComponent != null) _keyInfoComponent.MouseLeftButtonColorReset();
 
         _characterView.gameObject.SetActive(true);
         //_menuButtons.gameObject.SetActive(false);
@@ -129,6 +171,8 @@ public class ViewManager : MonoBehaviour
 
     public void CharacterViewUnShow()
     {
+        if (_characterView == null || _keyInfo == null || _memberBar == null || _map == null) return;
+
         _characterView.gameObject.SetActive(false);
         _keyInfo.gameObject.SetActive(true);
         //_menuButtons.gameObject.SetActive(true);
@@ -139,6 +183,12 @@ public class ViewManager : MonoBehaviour
 
     private void CommandBattleUIShow(bool active)
     {
+        if (_commandBattleView == null)
+        {
+            Debug.LogWarning("[ViewManager] CommandBattleView 를 찾지 못해 표시를 건너뜁니다.");
+            return;
+        }
+
         _commandBattleView.gameObject.SetActive(active);
     }
 
@@ -208,7 +258,9 @@ public class ViewManager : MonoBehaviour
 
     public bool CharacterViewIsActive()
     {
-        if (ViewManager.ViewInstance._characterView.gameObject.activeSelf)
+        if (_characterView == null) return false;
+
+        if (_characterView.gameObject.activeSelf)
         {
             return true;
         }

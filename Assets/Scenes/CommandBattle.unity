@@ -2599,12 +2599,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fc626d44fcb67b54891265df1019058e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActionBar
   _factory: {fileID: 0}
   _visibleCount: 12
   _badgePosX: 250
   _badgeFontSize: 20
-  _badgeColor: {r: 1, g: 0.78, b: 0.28, a: 1}
+  _badgeColor: {r: 1, g: 1, b: 1, a: 1}
   _showProjectedSlot: 1
   _slideInFromX: 220
   _moveSpeed: 9
@@ -6772,7 +6772,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b021a9972b01b9f4687e72db12d3c442, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _actionBar: {fileID: 740830486}
+  _actionBar: {fileID: 0}
   _commandArea: {fileID: 1468183364}
   _commandMemberBar: {fileID: 608553168}
   _detailView: {fileID: 1027559491}
@@ -8095,6 +8095,9 @@ MonoBehaviour:
   _slotHeight: 70
   _slotOffsetX: 90
   _currentScale: 1.12
+  _characterFramePath: Images/Mana_bar_edge
+  _monsterFramePath: Images/health_bar_edge
+  _frameTint: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &2142651191
 GameObject:
   m_ObjectHideFlags: 0

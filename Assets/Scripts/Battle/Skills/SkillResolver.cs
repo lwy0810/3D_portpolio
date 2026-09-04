@@ -8,11 +8,15 @@ using UnityEngine;
 ///     AttackPower  = (Atk 또는 Ats) × power / 100
 ///     DefensePower = (Def 또는 Adf)
 ///     Base     = 2.5 × AttackPower − 1.25 × DefensePower
-///     Modified = Base × ((1 + QPRM) × MULT + SPRM) × 속성배율
-///     Final    = Modified ± Modified / 15
+///     Modified = Base × ((1 + QPRM) × MULT + SPRM)
+///     Final    = Modified ± Base / 15
 ///     Heal     = power × (1 + Ats / 1000)
 ///     Break    = Final × breakMult
-/// SPRM : 크리티컬 시 +CriticalDmg(기본 0.5), S크래프트 +0.5
+/// SPRM : 크리티컬 시 +CriticalDmg(기본 0.5), 200 CP S크래프트 +0.5
+///
+/// 명중은 위키의 3단 판정(ACC 자동명중 → EVA 자동회피 → DEX 대 AGL)을 따른다.
+/// 기본 공격(BattleManager.ResolveAttack)도 이 파일의 RollHitRaw / CalcDamageRaw 를
+/// 그대로 쓴다. 공식은 이 파일에만 존재한다.
 /// </summary>
 public static class SkillResolver
 {
@@ -22,6 +26,19 @@ public static class SkillResolver
     private const float CpPerDamageTaken = 60f;
 
     private const float BrokenTakenBonus = 1.1f;    // 브레이크 상태는 받는 데미지 +10%
+
+    // 섬1·2 위키 : 한 번의 공격으로 줄 수 있는 최대 데미지
+    private const int MaxDamage = 49999;
+
+    // 위키 : "200 CP S크래프트" 만 최종 데미지 1.5배를 받는다
+    private const int SCraftFullCp = 200;
+
+    /// <summary>
+    /// 3단 명중 판정의 DEX 대 AGL 계수. 위키에 수식이 없어 정한 값이다.
+    ///     명중률 = 1 − AGL / (계수 × DEX)
+    /// 값을 낮추면 회피가 자주 나온다. 5 → 3 으로 낮추면 회피가 두 배 가까이 늘어난다.
+    /// </summary>
+    public static float DexAglCoefficient = 5f;
 
     // ── 자원 ────────────────────────────────────────────────
 
@@ -33,7 +50,7 @@ public static class SkillResolver
         switch (skill.CostType)
         {
             case CostType.Cp: return actor.Stat.Cp >= skill.Cost;
-            case CostType.Ep: return actor.Stat.EnergyPoint >= skill.Cost;
+            case CostType.Ep: return actor.Stat.Ep >= skill.Cost;
             default: return true;
         }
     }
@@ -63,6 +80,10 @@ public static class SkillResolver
                 skill.CostType == CostType.Cp ? "CP 부족" : "EP 부족");
 
         SkillResult res = new SkillResult { Actor = actor, Skill = skill };
+
+        // 위키 : 200 CP 로 쓴 S크래프트만 1.5배를 받는다. CP 를 지불하기 전에 확인해야 한다
+        bool sCraftFull = skill.Type == SkillType.SCraft && actor.Stat.Cp >= SCraftFullCp;
+
         Pay(actor, skill, res);
 
         // 자신 대상 (버프 · 방어) — 명중 판정 없음
@@ -108,7 +129,7 @@ public static class SkillResolver
             }
 
             // ── 데미지 ──────────────────────────────────────
-            tr.Damage = CalcDamage(actor, t, skill, tr.Hit == HitResult.Critical);
+            tr.Damage = CalcDamage(actor, t, skill, tr.Hit == HitResult.Critical, sCraftFull);
 
             t.Stat.AddHp(-tr.Damage);
             dealtTotal += tr.Damage;
@@ -142,30 +163,55 @@ public static class SkillResolver
     /// 1단 공격자 명중률 → 2단 대상 회피율 → 3단 Dex 대 Agl.
     /// 지금까지 Hit / Avoid 는 CSV 에서 읽히기만 하고 참조하는 코드가 없었다.
     /// </summary>
-    public static HitResult RollHit(BattleUnit actor, BattleUnit target, SkillData skill)
+    /// <summary>
+    /// 명중 판정. 위키 순서를 그대로 따른다.
+    ///   1단 ACC : 양수면 그 확률로 자동 명중(회피와 DEX 판정을 건너뛴다),
+    ///             음수면 그 확률로 자동 실패
+    ///   2단 EVA : 양수면 그 확률로 자동 회피, 음수면 그 확률로 자동 피격
+    ///   3단     : DEX 대 AGL 로 결정
+    /// guaranteed 는 아츠·S크래프트처럼 확정 명중인 경우다.
+    /// </summary>
+    public static HitResult RollHitRaw(float acc, float eva, float dex, float agl,
+                                       float crit, bool guaranteed, bool targetBroken)
     {
-        // 아츠는 회피되지 않는다 (시리즈 규칙)
-        if (skill.Type == SkillType.Art)
-            return Random.value < Crit(actor) ? HitResult.Critical : HitResult.Hit;
+        // 아츠와 S크래프트는 확정 명중. 브레이크 상태 대상도 반드시 맞는다
+        if (guaranteed || targetBroken) return CritRoll(crit);
 
-        // 브레이크 상태 대상은 반드시 맞는다
-        if (target.IsBroken)
-            return Random.value < Crit(actor) ? HitResult.Critical : HitResult.Hit;
+        // 1단 : ACC 보정
+        if (acc > 0f && Random.value < acc) return CritRoll(crit);
+        if (acc < 0f && Random.value < -acc) return HitResult.Miss;
 
-        // 1단 : 명중 보정
-        float accuracy = 1f + actor.Effective("Hit");
-        if (Random.value > accuracy) return HitResult.Miss;
+        // 2단 : EVA 보정
+        if (eva > 0f && Random.value < eva) return HitResult.Evade;
+        if (eva < 0f && Random.value < -eva) return CritRoll(crit);
 
-        // 2단 : 회피율
-        if (Random.value < target.Effective("Avoid")) return HitResult.Evade;
+        // 3단 : DEX 대 AGL
+        float d = Mathf.Max(1f, dex);
+        float a = Mathf.Max(0f, agl);
+        float p = Mathf.Clamp01(1f - a / (Mathf.Max(0.01f, DexAglCoefficient) * d));
 
-        // 3단 : Dex 대 Agl
-        float dex = Mathf.Max(1f, actor.Effective("Dex"));
-        float agl = Mathf.Max(0f, target.Effective("Agl"));
-        float p = 1f - agl / (5f * dex);
         if (Random.value > p) return HitResult.Evade;
 
-        return Random.value < Crit(actor) ? HitResult.Critical : HitResult.Hit;
+        return CritRoll(crit);
+    }
+
+    /// <summary>스킬 판정용 래퍼. 버프·디버프가 반영된 값을 넣는다.</summary>
+    public static HitResult RollHit(BattleUnit actor, BattleUnit target, SkillData skill)
+    {
+        bool guaranteed = skill.Type == SkillType.Art || skill.Type == SkillType.SCraft;
+
+        return RollHitRaw(actor.Effective("Hit"),
+                          target.Effective("Avoid"),
+                          actor.Effective("Dex"),
+                          target.Effective("Agl"),
+                          Crit(actor),
+                          guaranteed,
+                          target.IsBroken);
+    }
+
+    private static HitResult CritRoll(float crit)
+    {
+        return Random.value < Mathf.Clamp01(crit) ? HitResult.Critical : HitResult.Hit;
     }
 
     private static float Crit(BattleUnit actor)
@@ -175,27 +221,45 @@ public static class SkillResolver
 
     // ── 데미지 · 회복 ───────────────────────────────────────
 
-    public static int CalcDamage(BattleUnit actor, BattleUnit target, SkillData skill,
-                                 bool critical, float qprm = 0f, float mult = 1f)
+    /// <summary>
+    /// 데미지 공식 본체. 스탯 값만 받으므로 기본 공격과 스킬이 같은 식을 쓴다.
+    ///     Base     = 2.5 × (공격스탯 × power / 100) − 1.25 × 방어스탯
+    ///     Modified = Base × ((1 + QPRM) × MULT + SPRM)
+    ///     Final    = Modified ± Base / 15
+    /// SPRM : 크리티컬 +critBonus(기본 0.5), 200 CP S크래프트 +0.5
+    /// </summary>
+    public static int CalcDamageRaw(float atkStat, float defStat, int power,
+                                    bool critical, float critBonus, bool sCraftFull,
+                                    bool targetBroken, float qprm = 0f, float mult = 1f)
     {
-        float atkStat = skill.IsMagic ? actor.Effective("Ats") : actor.Effective("Atk");
-        float defStat = skill.IsMagic ? target.Effective("Adf") : target.Effective("Def");
-
-        float attackPower = atkStat * skill.Power / 100f;
+        float attackPower = atkStat * power / 100f;
         float basis = 2.5f * attackPower - 1.25f * defStat;
         if (basis < 1f) basis = 1f;
 
         float sprm = 0f;
-        if (critical) sprm += actor.Stat.CriticalDmg > 0f ? actor.Stat.CriticalDmg : 0.5f;
-        if (skill.Type == SkillType.SCraft) sprm += 0.5f;
+        if (critical) sprm += critBonus > 0f ? critBonus : 0.5f;
+        if (sCraftFull) sprm += 0.5f;
 
         float modified = basis * ((1f + qprm) * mult + sprm);
-        if (target.IsBroken) modified *= BrokenTakenBonus;
+        if (targetBroken) modified *= BrokenTakenBonus;
 
-        float variance = modified / 15f;
+        // 위키 : 랜덤은 ±Base Damage/15 다. 보정 후 값이 아니라 Base 기준이다
+        float variance = basis / 15f;
         float final = modified + Random.Range(-variance, variance);
 
-        return Mathf.Max(1, Mathf.RoundToInt(final));
+        return Mathf.Clamp(Mathf.RoundToInt(final), 1, MaxDamage);
+    }
+
+    public static int CalcDamage(BattleUnit actor, BattleUnit target, SkillData skill,
+                                 bool critical, bool sCraftFull = false,
+                                 float qprm = 0f, float mult = 1f)
+    {
+        float atkStat = skill.IsMagic ? actor.Effective("Ats") : actor.Effective("Str");
+        float defStat = skill.IsMagic ? target.Effective("Adf") : target.Effective("Def");
+
+        return CalcDamageRaw(atkStat, defStat, skill.Power,
+                             critical, actor.Stat.CriticalDmg, sCraftFull,
+                             target.IsBroken, qprm, mult);
     }
 
     /// <summary>섬4 기준 : Heal = power × (1 + Ats / 1000)</summary>
@@ -208,7 +272,7 @@ public static class SkillResolver
     /// <summary>UI 표시용 예상 데미지. 분산과 크리티컬을 제외한 기대값.</summary>
     public static int PreviewDamage(BattleUnit actor, BattleUnit target, SkillData skill)
     {
-        float atkStat = skill.IsMagic ? actor.Effective("Ats") : actor.Effective("Atk");
+        float atkStat = skill.IsMagic ? actor.Effective("Ats") : actor.Effective("Str");
         float defStat = skill.IsMagic ? target.Effective("Adf") : target.Effective("Def");
 
         float basis = 2.5f * (atkStat * skill.Power / 100f) - 1.25f * defStat;

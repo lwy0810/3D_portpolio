@@ -494,7 +494,7 @@ MonoBehaviour:
   _hpValue: {fileID: 1388436944}
   _epValue: {fileID: 371108049}
   _spValue: {fileID: 839098826}
-  _atkValue: {fileID: 1318811133}
+  _strValue: {fileID: 0}
   _defValue: {fileID: 1695190048}
   _speedValue: {fileID: 1757466318}
   _hitValue: {fileID: 1735176962}
@@ -3565,7 +3565,7 @@ CanvasGroup:
   m_GameObject: {fileID: 173790348}
   m_Enabled: 1
   m_Alpha: 0
-  m_Interactable: 1
+  m_Interactable: 0
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
 --- !u!1 &177637459
@@ -17356,7 +17356,7 @@ MonoBehaviour:
   _hpValue: {fileID: 97255674}
   _epValue: {fileID: 2049239350}
   _spValue: {fileID: 1454572358}
-  _atkValue: {fileID: 1748315255}
+  _strValue: {fileID: 0}
   _defValue: {fileID: 778631487}
   _speedValue: {fileID: 1058977940}
   _hitValue: {fileID: 1236550561}
@@ -25164,7 +25164,7 @@ MonoBehaviour:
   _hpValue: {fileID: 371024208}
   _epValue: {fileID: 1296551009}
   _spValue: {fileID: 1091278233}
-  _atkValue: {fileID: 1389878185}
+  _strValue: {fileID: 0}
   _defValue: {fileID: 1640944987}
   _speedValue: {fileID: 685391676}
   _hitValue: {fileID: 614949273}
@@ -27583,7 +27583,7 @@ MonoBehaviour:
   _hpValue: {fileID: 1916903985}
   _epValue: {fileID: 378158816}
   _spValue: {fileID: 2146031953}
-  _atkValue: {fileID: 1016834907}
+  _strValue: {fileID: 0}
   _defValue: {fileID: 1699521082}
   _speedValue: {fileID: 453665318}
   _hitValue: {fileID: 1749102532}
@@ -55409,7 +55409,7 @@ MonoBehaviour:
   _hpValue: {fileID: 590593644}
   _epValue: {fileID: 1461045735}
   _spValue: {fileID: 896708067}
-  _atkValue: {fileID: 777024212}
+  _strValue: {fileID: 0}
   _defValue: {fileID: 979797675}
   _speedValue: {fileID: 531175602}
   _hitValue: {fileID: 756796566}

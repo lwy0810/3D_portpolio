@@ -16,7 +16,7 @@ public class StatusView : MonoBehaviour
     [SerializeField] private Text _spValue;
 
     // BottomBar
-    [SerializeField] private Text _atkValue;
+    [SerializeField] private Text _strValue;
     [SerializeField] private Text _defValue;
     [SerializeField] private Text _speedValue;
     [SerializeField] private Text _hitValue;
@@ -66,9 +66,9 @@ public class StatusView : MonoBehaviour
         _nameText.text = _stat.Name;
         _lvValue.text = _stat.Level.ToString();
         _hpValue.text = _stat.Hp.ToString();
-        _epValue.text = _stat.EnergyPoint.ToString();
-        _spValue.text = _stat.SpecialPoint.ToString();
-        _atkValue.text = _stat.Atk.ToString();
+        _epValue.text = _stat.Ep.ToString();
+        _spValue.text = _stat.Cp.ToString();
+        _strValue.text = _stat.Str.ToString();
         _defValue.text = _stat.Def.ToString();
         _speedValue.text = _stat.Speed.ToString();
         _hitValue.text = $"{_stat.Hit * 100}%";

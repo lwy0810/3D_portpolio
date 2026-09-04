@@ -22,13 +22,14 @@ public class Stat
     // ── 자원 ────────────────────────────────────────────────
     private int _hp;
     private int _maxHp;
-    private int _energyPoint;     // EP  아츠 자원
+    private int _ep;     // EP  아츠 자원
+    private int _maxEp;
     private int _cp;              // CP  크래프트 자원 (0 ~ MaxCp)
     private int _maxCp = 200;
     private int _bp;              // BP  브레이브 오더 자원
 
     // ── 물리 ────────────────────────────────────────────────
-    private int _atk;
+    private int _str;
     private int _def;
 
     // ── 아츠 ────────────────────────────────────────────────
@@ -57,12 +58,13 @@ public class Stat
 
     public int Hp { get => _hp; set { if (SetField(ref _hp, value)) Notify(); } }
     public int MaxHp { get => _maxHp; set { if (SetField(ref _maxHp, value)) Notify(); } }
-    public int EnergyPoint { get => _energyPoint; set { if (SetField(ref _energyPoint, value)) Notify(); } }
+    public int Ep { get => _ep; set { if (SetField(ref _ep, value)) Notify(); } }
+    public int MaxEp { get => _maxEp; set { if (SetField(ref _maxEp, value)) Notify(); } }
     public int Cp { get => _cp; set { if (SetField(ref _cp, value)) Notify(); } }
     public int MaxCp { get => _maxCp; set { if (SetField(ref _maxCp, value)) Notify(); } }
     public int Bp { get => _bp; set { if (SetField(ref _bp, value)) Notify(); } }
 
-    public int Atk { get => _atk; set { if (SetField(ref _atk, value)) Notify(); } }
+    public int Str { get => _str; set { if (SetField(ref _str, value)) Notify(); } }
     public int Def { get => _def; set { if (SetField(ref _def, value)) Notify(); } }
     public int Ats { get => _ats; set { if (SetField(ref _ats, value)) Notify(); } }
     public int Adf { get => _adf; set { if (SetField(ref _adf, value)) Notify(); } }
@@ -93,10 +95,11 @@ public class Stat
         {
             case "Hp": return _hp;
             case "MaxHp": return _maxHp;
-            case "EnergyPoint": return _energyPoint;
+            case "Ep": return _ep;
+            case "MaxEp": return _maxEp;
             case "Cp": return _cp;
             case "Bp": return _bp;
-            case "Atk": return _atk;
+            case "Str": return _str;
             case "Def": return _def;
             case "Ats": return _ats;
             case "Adf": return _adf;
@@ -123,7 +126,7 @@ public class Stat
 
     public void AddEp(int delta)
     {
-        EnergyPoint = Math.Max(0, _energyPoint + delta);
+        Ep = Math.Max(0, _ep + delta);
     }
 
     private bool SetField<T>(ref T field, T value)

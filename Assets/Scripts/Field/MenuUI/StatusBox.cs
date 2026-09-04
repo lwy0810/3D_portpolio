@@ -54,8 +54,8 @@ public class StatusBox : MonoBehaviour
         _nameText.text = _character.Stat.Name;
         _lvText.text = _character.Stat.Level.ToString();
         _HpText.text = _character.Stat.Hp.ToString();
-        _EpText.text = _character.Stat.EnergyPoint.ToString();
-        _spText.text = _character.Stat.SpecialPoint.ToString();
+        _EpText.text = _character.Stat.Ep.ToString();
+        _spText.text = _character.Stat.Cp.ToString();
     }
 
     private void Unsubscribe()

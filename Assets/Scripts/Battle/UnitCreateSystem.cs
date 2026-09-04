@@ -149,20 +149,22 @@ public class UnitCreateSystem : MonoBehaviour
         s.MaxHp = row.GetInt("maxHp", 1);
         s.Hp = row.GetInt("hp", s.MaxHp);
 
-        s.EnergyPoint = row.GetInt("ep", 100);
+        s.Ep = row.GetInt("ep", 100);
 
         // sp 컬럼은 CP 로 승계한다. cp / maxCp 컬럼이 있으면 그쪽을 우선한다.
         s.MaxCp = row.Has("maxCp") ? row.GetInt("maxCp", 200) : 200;
         s.Cp = row.Has("cp") ? row.GetInt("cp") : 0;
 
-        s.Atk = row.GetInt("atk");
+        s.Str = row.GetInt("str");
         s.Def = row.GetInt("def");
 
         // ats / adf 가 없으면 물리 스탯을 그대로 쓴다 (기존 CSV 하위 호환)
-        s.Ats = row.Has("ats") ? row.GetInt("ats") : s.Atk;
+        s.Ats = row.Has("ats") ? row.GetInt("ats") : s.Str;
         s.Adf = row.Has("adf") ? row.GetInt("adf") : s.Def;
 
         s.Speed = row.GetInt("speed", 1);
+
+        // 3단 명중 판정(DEX 대 AGL)에 쓰인다. 없으면 0 이 되어 판정이 무의미해진다
         s.Dex = row.Has("dex") ? row.GetInt("dex") : 20;
         s.Agl = row.Has("agl") ? row.GetInt("agl") : 10;
 

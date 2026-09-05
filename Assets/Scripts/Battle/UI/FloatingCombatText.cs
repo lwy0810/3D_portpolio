@@ -177,7 +177,7 @@ public class FloatingCombatText : MonoBehaviour
         Camera[] all = Camera.allCameras;
         if (all != null && all.Length > 0) return all[0];
 
-        return Object.FindObjectOfType<Camera>();
+        return Object.FindAnyObjectByType<Camera>();
     }
 
     /// <summary>
@@ -242,7 +242,7 @@ public class FloatingCombatText : MonoBehaviour
         _text.enableAutoSizing = false;
         _text.fontStyle = FontStyles.Bold;
         _text.alignment = TextAlignmentOptions.Center;
-        _text.enableWordWrapping = false;
+        _text.textWrappingMode = TextWrappingModes.NoWrap;
         _text.overflowMode = TextOverflowModes.Overflow;
         _text.raycastTarget = false;
 

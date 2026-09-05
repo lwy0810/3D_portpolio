@@ -529,7 +529,7 @@ public class ActionBar : MonoBehaviour
         _badgeText.fontStyle = FontStyles.Bold;
         
         _badgeText.alignment = TextAlignmentOptions.Left;
-        _badgeText.enableWordWrapping = false;
+        _badgeText.textWrappingMode = TextWrappingModes.NoWrap;
         _badgeText.raycastTarget = false;
 
         ApplyBadgeStyle();

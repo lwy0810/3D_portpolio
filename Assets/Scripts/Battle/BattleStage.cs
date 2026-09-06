@@ -30,6 +30,14 @@ public class BattleStage : MonoBehaviour
     [Tooltip("지면을 찾을 때 아래로 훑는 거리(m)")]
     [SerializeField] private float _probeDown = 12.0f;
 
+    [Header("전투 영역")]
+    [Tooltip("대열을 감싸는 원형 영역의 여유 반경(m). 이 안에서만 이동한다")]
+    [SerializeField] private float _areaMargin = 3.5f;
+    [Tooltip("전투 영역 테두리를 표시한다")]
+    [SerializeField] private bool _showArea = true;
+    [Tooltip("몬스터 타깃 원판을 지면에서 띄우는 높이(m). 0 이면 지면에 파묻혀 보인다")]
+    [SerializeField] private float _targetAreaLift = 0.08f;
+
     [Header("전투 후")]
     [Tooltip("후퇴·패배로 돌아왔을 때 몬스터에게서 밀어내는 거리(m). 0 이면 즉시 재조우한다")]
     [SerializeField] private float _retreatPushBack = 4.0f;
@@ -50,6 +58,9 @@ public class BattleStage : MonoBehaviour
 
     private FieldSnapshot _snapshot;
     private readonly List<GameObject> _spawned = new List<GameObject>();
+
+    private Vector3 _center;
+    private float _radius;
 
     private BattleFormation.Slot[] _allySlots = new BattleFormation.Slot[8];
     private BattleFormation.Slot[] _enemySlots = new BattleFormation.Slot[8];
@@ -169,9 +180,57 @@ public class BattleStage : MonoBehaviour
 
         _spawned.AddRange(_made);
 
+        // 타깃 원판을 지면에서 살짝 띄운다. 대열을 hit.point 에 정확히 맞추므로
+        // 그냥 두면 원판이 지형과 같은 높이가 되어 일부가 파묻힌다
+        for (int i = 0; i < _made.Count; i++)
+        {
+            if (_made[i] == null) continue;
+
+            Monster _m = _made[i].GetComponent<Monster>();
+            if (_m != null) _m.LiftTargetArea(_targetAreaLift);
+        }
+
+        // ⑥ 전투 영역 표시. 이동 제한도 이 반경을 쓴다
+        _center = ComputeCenter(_allyCount, _enemyCount);
+        _radius = ComputeRadius(_allyCount, _enemyCount);
+
+        if (_showArea) BattleArea.Show(_center, _radius);
+
         Debug.Log($"[BattleStage] 전투 대열 완성 — 아군 {_slot}명 / 적군 {_made.Count}마리, " +
-                  $"조우 지점 {_snapshot.LeaderPos}");
+                  $"영역 중심 {_center} 반지름 {_radius:F1}m");
         return true;
+    }
+
+    /// <summary>대열 전체의 중심.</summary>
+    private Vector3 ComputeCenter(int allyCount, int enemyCount)
+    {
+        Vector3 _sum = Vector3.zero;
+        int _n = 0;
+
+        for (int i = 0; i < allyCount && i < _allySlots.Length; i++) { _sum += _allySlots[i].Position; _n++; }
+        for (int i = 0; i < enemyCount && i < _enemySlots.Length; i++) { _sum += _enemySlots[i].Position; _n++; }
+
+        return _n > 0 ? _sum / _n : _snapshot.LeaderPos;
+    }
+
+    /// <summary>가장 먼 슬롯까지의 거리 + 여유. 대열이 영역에 딱 붙지 않게 한다.</summary>
+    private float ComputeRadius(int allyCount, int enemyCount)
+    {
+        float _far = 0.0f;
+
+        for (int i = 0; i < allyCount && i < _allySlots.Length; i++)
+            _far = Mathf.Max(_far, FlatDistance(_allySlots[i].Position, _center));
+        for (int i = 0; i < enemyCount && i < _enemySlots.Length; i++)
+            _far = Mathf.Max(_far, FlatDistance(_enemySlots[i].Position, _center));
+
+        return _far + Mathf.Max(0.5f, _areaMargin);
+    }
+
+    private static float FlatDistance(Vector3 a, Vector3 b)
+    {
+        Vector3 d = a - b;
+        d.y = 0.0f;
+        return d.magnitude;
     }
 
     /// <summary>
@@ -181,6 +240,8 @@ public class BattleStage : MonoBehaviour
     public void RestoreField(bool victory)
     {
         GameManager _gm = GameManager.GameInstance;
+
+        BattleArea.Hide();
 
         // ① 전투용 몬스터 정리
         for (int i = 0; i < _spawned.Count; i++)
@@ -283,15 +344,11 @@ public class BattleStage : MonoBehaviour
         if (_obj != null) Debug.Log($"[BattleStage] 필드 몬스터를 {pos} 에 다시 만들었습니다.");
     }
 
-    /// <summary>전투 대열의 중심. 카메라가 바라볼 지점.</summary>
-    public Vector3 BattleCenter(int allyCount, int enemyCount)
-    {
-        Vector3 sum = Vector3.zero;
-        int n = 0;
-        for (int i = 0; i < allyCount && i < _allySlots.Length; i++) { sum += _allySlots[i].Position; n++; }
-        for (int i = 0; i < enemyCount && i < _enemySlots.Length; i++) { sum += _enemySlots[i].Position; n++; }
-        return n > 0 ? sum / n : _snapshot.LeaderPos;
-    }
+    /// <summary>전투 영역의 중심. 카메라가 바라볼 지점.</summary>
+    public Vector3 BattleCenter => _center;
+
+    /// <summary>전투 영역의 반지름.</summary>
+    public float BattleRadius => _radius;
 
     /// <summary>조우 시 플레이어가 바라본 방향. 전투 카메라를 뒤에 두는 데 쓴다.</summary>
     public Vector3 EncounterForward =>

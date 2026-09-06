@@ -304,6 +304,9 @@ public class BattleManager : MonoBehaviour
         CommandUISet();
         CommandSelectController();
         CameraZoom();
+
+        // 카메라가 움직인 뒤에 투영해야 창이 한 프레임 늦게 따라오지 않는다
+        UpdateCommandAreaPosition();
     }
 
 
@@ -446,15 +449,65 @@ public class BattleManager : MonoBehaviour
             return;
         }
 
+        // 카메라를 아군 뒤쪽에 놓는다.
+        //
+        // 예전에는 position 만 (0,0,-4) 로 밀고 회전은 그대로 뒀다. 전투 전용 씬의
+        // Main Camera 가 이미 정면을 보고 있었으니 성립했던 코드다. 이제는 필드
+        // 카메라를 이어받으므로, 위에서 내려다보는 회전이 남아 대상이 화면 밖으로
+        // 밀려난다. CommandArea 의 화면 Y 가 1300 을 넘던 원인이다.
+        //
+        // CameraZoom() 이 angle 로 궤도를 계산하므로 각도만 맞춰주면
+        // 다음 프레임부터 위치·회전이 모두 알아서 잡힌다.
+        Vector3 _forward = BattleForward();
+
+        angle = Mathf.Atan2(-_forward.x, -_forward.z) * Mathf.Rad2Deg;
+        distance = Mathf.Clamp(distance, 4.0f, 5.02f);
+        height = Mathf.Clamp(height <= 0.0f ? 3.5f : height, -0.5f, 5.0f);
+
         if (_camera != null)
         {
-            _camera.transform.position = _characterTarget.position + new Vector3(0.0f, 0.0f, -4.0f);
+            float _rad = angle * Mathf.Deg2Rad;
+            Vector3 _offset = new Vector3(Mathf.Sin(_rad) * distance, height, Mathf.Cos(_rad) * distance);
+
+            _camera.transform.position = _characterTarget.position + _offset;
+            _camera.transform.LookAt(_characterTarget);
         }
 
-        if (ViewManager.ViewInstance != null)
+        UpdateCommandAreaPosition();
+    }
+
+    /// <summary>전투 대열의 정면. 아군에서 적군을 향하는 방향.</summary>
+    private Vector3 BattleForward()
+    {
+        if (_stage != null)
         {
-            _characterScreenPos = ViewManager.ViewInstance.CommandAreaPosSet(_characterTarget.position);
+            Vector3 _f = _stage.EncounterForward;
+            if (_f.sqrMagnitude > 0.0001f) return _f.normalized;
         }
+
+        if (_characterTarget != null && _monsterTarget != null)
+        {
+            Vector3 _f = _monsterTarget.position - _characterTarget.position;
+            _f.y = 0.0f;
+            if (_f.sqrMagnitude > 0.0001f) return _f.normalized;
+        }
+
+        return Vector3.forward;
+    }
+
+    /// <summary>
+    /// 커맨드 창을 대상 머리 옆에 붙인다.
+    ///
+    /// 예전에는 InitBattleView 에서 한 번만 계산했다. 전투 전용 씬에서는 카메라가
+    /// 거의 고정이라 그걸로 충분했지만, CameraZoom 이 마우스로 궤도를 돌리므로
+    /// 매 프레임 다시 투영해야 창이 캐릭터를 따라간다.
+    /// </summary>
+    private void UpdateCommandAreaPosition()
+    {
+        if (_characterTarget == null) return;
+        if (ViewManager.ViewInstance == null) return;
+
+        _characterScreenPos = ViewManager.ViewInstance.CommandAreaPosSet(_characterTarget.position);
     }
 
     // ── 인플레이스 전환 ─────────────────────────────────────
@@ -1231,11 +1284,8 @@ public class BattleManager : MonoBehaviour
     {
         if (_attacker == null || _defender == null) yield break;
 
+        // 접근 방향을 계산하는 기준점. 공격 후 이 자리로 돌아오지는 않는다
         Vector3 StartPos = _attacker.transform.position;
-
-        // 몬스터는 Quaternion.Euler(0,180,0) 으로 생성되므로 끝에 identity 로 되돌리면
-        // 캐릭터를 등지게 된다. 시작 회전을 그대로 복원한다.
-        Quaternion StartRot = _attacker.transform.rotation;
 
         CharacterController _controller = _attacker.GetComponent<CharacterController>();
         Animator _animator = _attacker.GetComponent<Animator>();
@@ -1268,7 +1318,9 @@ public class BattleManager : MonoBehaviour
             // 연출 중 대상 · 공격자 파괴, 전투 종료 (TC 126)
             if (_attacker == null || _defender == null || _isBattleOver) yield break;
 
-            Vector3 endPos = _defender.transform.position + _approachDir * approachDistance;
+            // 목표 지점도 영역 안으로 당긴다. 밖이면 경계를 밀며 maxSeconds 를 다 쓴다
+            Vector3 endPos = BattleArea.ClampToArea(
+                _defender.transform.position + _approachDir * approachDistance);
             Vector3 toTarget = endPos - _attacker.transform.position;
             toTarget.y = 0f;
 
@@ -1316,40 +1368,15 @@ public class BattleManager : MonoBehaviour
         // 파괴될 오브젝트를 계속 움직이면 예외가 난다
         if (_attacker == null || _isBattleOver) yield break;
 
-        // 원위치로 복귀
-        PlayRun(_animator, _useParams, moveSpeedUnits);
+        // 공격 후 원위치 복귀는 하지 않는다.
+        //
+        // 왕복 이동이 턴마다 반복되면 연출이 길어지고, 원본도 행동한 자리에 남는다.
+        // 대열이 흐트러지는 것은 전투 영역(BattleArea) 안에서 벌어지므로
+        // 유닛이 전장 밖으로 흘러나가지는 않는다.
+        //
+        // 회전은 되돌리지 않는다. 방금 때린 상대를 계속 보고 있는 것이 자연스럽다.
 
-        elapsed = 0f;
-        while (elapsed < maxSeconds)
-        {
-            if (_attacker == null || _isBattleOver) yield break;
-
-            Vector3 toStart = StartPos - _attacker.transform.position;
-            toStart.y = 0f;
-
-            if (toStart.magnitude <= arriveThreshold)
-            {
-                break;
-            }
-
-            Vector3 dir = toStart.normalized;
-            _attacker.transform.rotation = Quaternion.LookRotation(dir);
-            MoveUnit(_attacker, _controller, dir * moveSpeedUnits * Time.deltaTime);
-
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        yield return new WaitForSeconds(0.1f);
-
-        if (_attacker == null) yield break;
-
-        // 원래 보고 있던 방향으로 되돌린다. 몬스터는 이때 캐릭터를 마주보게 된다
-        _attacker.transform.rotation = StartRot;
-
-        StopRun(_animator, _useParams, _idleStateHash);
-
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.3f);
 
         IsAttack = false;
 
@@ -1371,10 +1398,26 @@ public class BattleManager : MonoBehaviour
     /// CharacterController 가 있으면 그것으로, 없으면 Transform 으로 옮긴다.
     /// 몬스터 프리팹에 CharacterController 가 없어도 같은 연출이 돌아간다.
     /// </summary>
+    /// <summary>
+    /// 유닛 이동. 전투 영역 밖으로는 나가지 않는다.
+    ///
+    /// 공격 후 복귀를 없앴으므로 유닛은 이동한 자리에 계속 남는다.
+    /// 경계가 없으면 턴이 반복되는 사이에 지형 밖까지 흘러나간다.
+    /// 두 이동 루프가 모두 이 함수를 지나므로 여기 한 곳에서 막는다.
+    /// </summary>
     private static void MoveUnit(Unit _unit, CharacterController _controller, Vector3 _delta)
     {
-        if (_controller != null) _controller.Move(_delta);
-        else _unit.transform.position += _delta;
+        Vector3 _next = _unit.transform.position + _delta;
+        Vector3 _clamped = BattleArea.ClampToArea(_next);
+
+        if (_controller != null)
+        {
+            _controller.Move(_clamped - _unit.transform.position);
+        }
+        else
+        {
+            _unit.transform.position = _clamped;
+        }
     }
 
     /// <summary>

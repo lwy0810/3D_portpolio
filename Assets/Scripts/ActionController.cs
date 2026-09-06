@@ -28,6 +28,9 @@ public class ActionController : MonoBehaviour
 
     private float oriSpeed;
 
+    /// <summary>필드가 아닌 상태로 넘어가며 Idle 을 강제했는지.</summary>
+    private bool _idleForced = false;
+
     private Vector3 velocity;
     private bool _isAttack = false; // 현재 공격중인지 확인
     private bool _isWalk = false;   // 현재 걷는 중인지 확인
@@ -55,19 +58,30 @@ public class ActionController : MonoBehaviour
 
     void Update()
     {
+        // 필드가 아니면 이동 처리를 하지 않는다.
+        //
+        // 다만 그냥 빠져나가면 애니메이터에 마지막 상태(Run/Walk)가 그대로 남아
+        // 전투가 시작된 뒤에도 제자리에서 계속 걷는다. 예전에는 씬이 바뀌면서
+        // 캐릭터가 새로 만들어져 저절로 Idle 로 시작했던 부분이다.
+        if (!GameFlow.IsField)
+        {
+            if (!_idleForced)
+            {
+                ForceIdle();
+                _idleForced = true;
+            }
+            return;
+        }
+
+        _idleForced = false;
+
         // 전환 연출 중에는 입력을 받지 않는다. 섬광이 터지는 사이에 움직이면
         // 대열 계산에 쓴 조우 지점과 실제 위치가 어긋난다.
         if (BattleManager.BattleInstance != null && BattleManager.BattleInstance.IsTransitioning) return;
 
         if(ViewManager.ViewInstance.IsMenuActive == false)
         {
-            if (GameFlow.IsField)
-            {
-                CharacterMove();
-            }
-            else if (GameFlow.IsBattle)
-            {
-            }
+            CharacterMove();
         }
     }
         
@@ -149,6 +163,27 @@ public class ActionController : MonoBehaviour
         {
             this.transform.rotation = Quaternion.LookRotation(direct);
         }
+    }
+
+    /// <summary>
+    /// 이동 애니메이션을 즉시 멈춘다. 필드를 벗어날 때 한 번 호출된다.
+    /// 전투 연출(AttackSequence)이 같은 애니메이터를 다시 몰기 때문에,
+    /// 여기서는 이동 관련 파라미터만 초기값으로 돌려놓는다.
+    /// </summary>
+    private void ForceIdle()
+    {
+        CurrentPlayerState = PlayerState.Idle;
+
+        _isAttack = false;
+        _isWalk = false;
+        _isRun = true;
+        velocity = Vector3.zero;
+
+        if (_animator == null) return;
+
+        _animator.SetBool("IsWalk", false);
+        _animator.SetBool("IsRun", false);
+        _animator.SetFloat("moveSpeed", 0.0f);
     }
 
     /// <summary>현재 상태에 맞는 속도와 애니메이터 파라미터를 적용한다.</summary>

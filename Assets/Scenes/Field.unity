@@ -4395,7 +4395,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 173790348}
   m_Enabled: 1
-  m_Alpha: 1
+  m_Alpha: 0
   m_Interactable: 0
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
@@ -65796,6 +65796,7 @@ GameObject:
   - component: {fileID: 2089596989}
   - component: {fileID: 2089596992}
   - component: {fileID: 2089596991}
+  - component: {fileID: 2089596993}
   m_Layer: 0
   m_Name: BattleManager
   m_TagString: Untagged
@@ -65820,6 +65821,11 @@ MonoBehaviour:
   _commandBattlePos: {fileID: 608553167}
   _actionBar: {fileID: 740830486}
   _flow: {fileID: 0}
+  _stage: {fileID: 0}
+  _flashIn: 0.12
+  _flashHold: 0.06
+  _flashOut: 0.35
+  _flashColor: {r: 1, g: 1, b: 1, a: 1}
   _runStateName: RunForward
   _attackStateName: Attack1
   _attackImpactDelay: 0.4
@@ -65887,6 +65893,29 @@ MonoBehaviour:
   _characterFramePath: Images/Mana_bar_edge
   _monsterFramePath: Images/health_bar_edge
   _frameTint: {r: 1, g: 1, b: 1, a: 1}
+--- !u!114 &2089596993
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2089596988}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 02fbfc0a111696e4cb7849ac13d47f15, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleStage
+  _spacing: 2.4
+  _gap: 7
+  _battleMonsterCount: 3
+  _snapToGround: 1
+  _probeUp: 3
+  _probeDown: 12
+  _areaMargin: 3.5
+  _showArea: 1
+  _targetAreaLift: 0.3
+  _retreatPushBack: 4
+  _respawnSeconds: 8
 --- !u!1 &2095823939
 GameObject:
   m_ObjectHideFlags: 0

@@ -95,6 +95,103 @@ public class UnitCreateSystem : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 필드 몬스터를 지정한 위치에 하나 만든다.
+    ///
+    /// 예전에는 전투가 끝나면 Field 씬을 다시 로드했고, 그때 MonsterCreate 가
+    /// 필드 몬스터를 새로 만들었다. 씬을 갈지 않으므로 그 일을 여기서 대신한다.
+    /// </summary>
+    public GameObject CreateFieldMonsterAt(Vector3 pos, Quaternion rot)
+    {
+        GameManager _gm = GameManager.GameInstance;
+        if (_gm == null || _gm._monsterPrefabs == null)
+        {
+            Debug.LogError("[UnitCreateSystem] 몬스터 프리팹이 없어 필드 몬스터를 만들 수 없습니다.");
+            return null;
+        }
+
+        CsvTable csv = CSVFileLoader.LoadTable("MonsterStatus");
+        if (csv.Rows.Count == 0)
+        {
+            Debug.LogError("[UnitCreateSystem] MonsterStatus.csv 에 데이터 행이 없습니다.");
+            return null;
+        }
+
+        GameObject _obj = Instantiate(_gm._monsterPrefabs, pos, rot);
+
+        Monster _comp = _obj.GetComponent<Monster>();
+        if (_comp == null)
+        {
+            Debug.LogError("[UnitCreateSystem] 몬스터 프리팹에 Monster 컴포넌트가 없습니다.");
+            Destroy(_obj);
+            return null;
+        }
+
+        MonsterStat(csv.Rows[0], _comp);
+        _gm.Monster = _obj;
+
+        return _obj;
+    }
+
+    /// <summary>
+    /// 인플레이스 전투용 몬스터를 지정한 대열 위치에 만든다.
+    ///
+    /// 기존 MonsterCreate 의 CommandBattle 분기는 Vector3.zero 기준 절대 좌표였다.
+    /// 씬을 갈지 않으므로 좌표를 밖에서 받아야 한다.
+    /// </summary>
+    /// <returns>만들어진 몬스터 목록. 실패하면 빈 목록</returns>
+    public List<GameObject> CreateBattleMonstersAt(BattleFormation.Slot[] slots, int count)
+    {
+        List<GameObject> _made = new List<GameObject>();
+
+        GameManager _gm = GameManager.GameInstance;
+        if (_gm == null || _gm._monsterPrefabs == null)
+        {
+            Debug.LogError("[UnitCreateSystem] 몬스터 프리팹이 없습니다.");
+            return _made;
+        }
+
+        if (slots == null || count <= 0 || slots.Length < count)
+        {
+            Debug.LogError("[UnitCreateSystem] 전투 대열 슬롯이 부족합니다.");
+            return _made;
+        }
+
+        CsvTable csv = CSVFileLoader.LoadTable("MonsterStatus");
+        if (csv.Rows.Count == 0)
+        {
+            Debug.LogError("[UnitCreateSystem] MonsterStatus.csv 에 데이터 행이 없습니다.");
+            return _made;
+        }
+
+        CsvTable.Row row = csv.Rows[0];
+
+        for (int i = 0; i < count; i++)
+        {
+            GameObject _obj = Instantiate(_gm._monsterPrefabs,
+                                          slots[i].Position, slots[i].Rotation);
+
+            Monster _comp = _obj.GetComponent<Monster>();
+            if (_comp == null)
+            {
+                Debug.LogError("[UnitCreateSystem] 몬스터 프리팹에 Monster 컴포넌트가 없습니다.");
+                Destroy(_obj);
+                continue;
+            }
+
+            // 개체마다 다른 Stat 을 줘야 한다. 같은 인스턴스를 참조하면
+            // 한 마리가 맞을 때 세 마리 체력이 함께 줄어든다.
+            MonsterStat(row, _comp);
+
+            _gm.Monsters.Add(_obj);
+            _gm.MonsterComponents.Add(_comp);
+            _gm.Units.Add(_comp);
+            _made.Add(_obj);
+        }
+
+        return _made;
+    }
+
     // ── 스탯 부여 ───────────────────────────────────────────
 
     /// <summary>

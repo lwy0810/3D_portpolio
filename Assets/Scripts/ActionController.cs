@@ -55,6 +55,10 @@ public class ActionController : MonoBehaviour
 
     void Update()
     {
+        // 전환 연출 중에는 입력을 받지 않는다. 섬광이 터지는 사이에 움직이면
+        // 대열 계산에 쓴 조우 지점과 실제 위치가 어긋난다.
+        if (BattleManager.BattleInstance != null && BattleManager.BattleInstance.IsTransitioning) return;
+
         if(ViewManager.ViewInstance.IsMenuActive == false)
         {
             if (GameFlow.IsField)
@@ -197,7 +201,16 @@ public class ActionController : MonoBehaviour
         }
     }
 
-    private bool _encounterTriggered = false; // 씬 전환이 끝나기 전에 트리거가 중복 발동하는 것을 방지 (TC 35)
+    // 전환이 끝나기 전에 트리거가 중복 발동하는 것을 방지 (TC 35).
+    // 예전에는 씬이 바뀌면서 이 컴포넌트가 새로 만들어져 자동으로 초기화됐지만,
+    // 이제 씬을 갈지 않으므로 전투가 끝날 때 BattleManager 가 명시적으로 풀어준다.
+    private bool _encounterTriggered = false;
+
+    /// <summary>전투 종료 후 다시 조우할 수 있게 한다. BattleManager 가 호출한다.</summary>
+    public void ResetEncounter()
+    {
+        _encounterTriggered = false;
+    }
 
     private void OnTriggerEnter(Collider other)
     {
@@ -211,7 +224,18 @@ public class ActionController : MonoBehaviour
             if (GameFlow.IsField)
             {
                 _encounterTriggered = true;
-                SceneManager.LoadScene(GameFlow.BattleSceneName);
+
+                if (BattleManager.BattleInstance != null)
+                {
+                    // 씬 전환이 아니라 이 자리에서 전투를 시작한다
+                    BattleManager.BattleInstance.BeginEncounter(other.gameObject);
+                }
+                else
+                {
+                    Debug.LogError("[ActionController] BattleManager 가 없어 전투를 시작할 수 없습니다. " +
+                                   "Field 씬에 BattleManager 오브젝트가 있는지 확인하세요.");
+                    _encounterTriggered = false;
+                }
             }
 
         }

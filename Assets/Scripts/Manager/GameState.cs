@@ -38,6 +38,30 @@ public static class GameFlow
     /// <summary>(이전 상태, 새 상태). 상태가 실제로 달라질 때만 호출된다.</summary>
     public static event System.Action<GameState, GameState> OnStateChanged;
 
+    /// <summary>
+    /// 씬을 새로 불러오면 상태를 그 씬에서 다시 유도한다.
+    ///
+    /// SetState 를 한 번 호출하면 그 뒤로는 씬 이름을 보지 않는다. 전투를 같은 씬에서
+    /// 시작하니 그게 맞지만, Intro 로 나갔다 오는 경로에서는 상태가 Battle/Field 로
+    /// 남아 버린다. 그래서 씬 로드마다 유도 방식으로 되돌린다.
+    ///
+    /// BeforeSceneLoad 에 등록하므로 어떤 MonoBehaviour 의 Awake 보다 먼저 구독되고,
+    /// 따라서 매니저들의 sceneLoaded 핸들러보다 먼저 호출된다. 호출 순서에 기대지 않고
+    /// 상태를 먼저 맞춰 놓기 위한 것이다.
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void HookSceneLoaded()
+    {
+        SceneManager.sceneLoaded -= SyncOnSceneLoaded;
+        SceneManager.sceneLoaded += SyncOnSceneLoaded;
+    }
+
+    private static void SyncOnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        _explicit = false;
+        _state = FromSceneName(scene.name);
+    }
+
     public static GameState State
     {
         get

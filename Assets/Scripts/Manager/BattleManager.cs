@@ -38,6 +38,20 @@ public class BattleManager : MonoBehaviour
     // AT 큐. 없으면 Battle() 에서 직접 붙인다
     [SerializeField] private BattleFlow _flow;
 
+    [Header("인플레이스 전환")]
+    [Tooltip("조우 지점에 전투 대열을 세우는 컴포넌트. 비어 있으면 씬에서 찾는다")]
+    [SerializeField] private BattleStage _stage;
+    [Tooltip("섬광이 차오르는 시간(초). 이 뒤에 재배치가 일어난다")]
+    [SerializeField] private float _flashIn = 0.12f;
+    [Tooltip("완전히 하얀 상태를 유지하는 시간(초)")]
+    [SerializeField] private float _flashHold = 0.06f;
+    [Tooltip("섬광이 걷히는 시간(초)")]
+    [SerializeField] private float _flashOut = 0.35f;
+    [SerializeField] private Color _flashColor = Color.white;
+
+    /// <summary>필드 ↔ 전투 전환 연출 중인지. 이 동안에는 입력과 전투 로직을 멈춘다.</summary>
+    public bool IsTransitioning { get; private set; }
+
     // ── 세팅 검사 ────────────────────────────────────────────────
     //
     // 전투 UI 와 BattleManager 를 CommandBattle 씬에서 Field 씬으로 옮기고 나면
@@ -282,7 +296,10 @@ public class BattleManager : MonoBehaviour
     {
         // 필드에서는 전투 입력도 전투 UI 갱신도 하지 않는다.
         // Field 씬으로 옮긴 뒤에는 이 컴포넌트가 필드에서도 계속 살아 있다.
-        if (!GameFlow.IsBattle) return;
+        //
+        // 전환 연출 중에도 멈춘다. 대열이 아직 없는 상태에서 CommandUISet 이 돌면
+        // 전투 UI 를 건드리다 참조가 비어 예외가 난다.
+        if (!GameFlow.IsBattle || IsTransitioning) return;
 
         CommandUISet();
         CommandSelectController();
@@ -437,6 +454,138 @@ public class BattleManager : MonoBehaviour
         if (ViewManager.ViewInstance != null)
         {
             _characterScreenPos = ViewManager.ViewInstance.CommandAreaPosSet(_characterTarget.position);
+        }
+    }
+
+    // ── 인플레이스 전환 ─────────────────────────────────────
+    //
+    // 예전에는 조우 시 SceneManager.LoadScene("CommandBattle") 로 씬을 갈았다.
+    // 그러면 Field 씬이 언로드되면서 전투 UI 와 필드 오브젝트가 모두 파괴되고,
+    // DontDestroyOnLoad 로 살아남은 매니저들만 죽은 참조를 들고 남는다.
+    // 원본(섬의궤적)은 씬을 갈지 않고 조우한 그 자리에서 전투를 시작한다.
+
+    /// <summary>필드에서 몬스터와 접촉했을 때. ActionController 가 호출한다.</summary>
+    public void BeginEncounter(GameObject fieldMonster)
+    {
+        if (IsTransitioning || GameFlow.IsBattle) return;
+
+        // 트리거에 닿은 것이 몬스터의 자식 콜라이더일 수 있다.
+        // 그대로 SetActive(false) 하면 몸통은 남고 콜라이더만 사라진다.
+        if (fieldMonster != null)
+        {
+            Monster _m = fieldMonster.GetComponentInParent<Monster>();
+            if (_m != null) fieldMonster = _m.gameObject;
+        }
+
+        StartCoroutine(EncounterRoutine(fieldMonster));
+    }
+
+    private IEnumerator EncounterRoutine(GameObject fieldMonster)
+    {
+        IsTransitioning = true;
+
+        // ① 섬광으로 화면을 덮는다. 재배치는 이 뒤에 해야 보이지 않는다
+        yield return EncounterFlash.FadeIn(_flashColor, _flashIn);
+
+        // ② 조우 지점에 대열을 세운다
+        BattleStage _st = EnsureStage();
+        bool _built = _st != null && _st.BuildBattle(fieldMonster);
+
+        if (!_built)
+        {
+            Debug.LogError("[BattleManager] 전투 대열을 세우지 못해 전투를 시작하지 않습니다.");
+            EncounterFlash.Clear();
+            ReleaseEncounterGuard();
+            IsTransitioning = false;
+            yield break;
+        }
+
+        // ③ 상태 전환. 이 시점부터 ActionController 의 이동과 FollowCamera 가 멈춘다
+        GameFlow.SetState(GameState.Battle);
+        IsBattle = true;
+
+        // ④ UI 교체
+        if (ViewManager.ViewInstance != null) ViewManager.ViewInstance.EnterBattleUI();
+
+        yield return new WaitForSeconds(Mathf.Max(0.0f, _flashHold));
+
+        // ⑤ 전투 시작. 섬광이 걷히기 전에 불러 첫 프레임부터 대열이 보이게 한다
+        Battle();
+
+        // ⑥ 섬광을 걷는다
+        yield return EncounterFlash.FadeOut(_flashColor, _flashOut);
+
+        IsTransitioning = false;
+    }
+
+    /// <summary>전투 종료 후 필드로 복귀. 씬을 갈지 않는다.</summary>
+    private IEnumerator ReturnToFieldRoutine(bool victory)
+    {
+        IsTransitioning = true;
+
+        yield return EncounterFlash.FadeIn(_flashColor, _flashIn);
+
+        // 전투용 몬스터 정리와 캐릭터 복구
+        BattleStage _st = EnsureStage();
+        if (_st != null) _st.RestoreField(victory);
+
+        // 전투 상태 정리. 다음 전투가 이전 목록을 물려받지 않게 한다
+        Characters.Clear();
+        Monsters.Clear();
+        if (_battleUnit != null) _battleUnit.Clear();
+        _pendingSkill = null;
+        _characterTarget = null;
+        _monsterTarget = null;
+        _commandState = CommandState.Select;
+        _lastUISetState = (CommandState)(-1);
+        IsBattle = false;
+
+        if (_createCommandActionMemberSystem != null) _createCommandActionMemberSystem.ClearAll();
+
+        GameFlow.SetState(GameState.Field);
+
+        if (ViewManager.ViewInstance != null) ViewManager.ViewInstance.ExitBattleUI();
+
+        // 다시 조우할 수 있게 트리거 잠금을 푼다.
+        // 씬을 갈 때는 컴포넌트가 새로 만들어져 저절로 풀렸던 부분이다
+        ReleaseEncounterGuard();
+
+        yield return new WaitForSeconds(Mathf.Max(0.0f, _flashHold));
+        yield return EncounterFlash.FadeOut(_flashColor, _flashOut);
+
+        IsTransitioning = false;
+    }
+
+    private BattleStage EnsureStage()
+    {
+        if (_stage != null) return _stage;
+
+        _stage = FindFirstObjectByType<BattleStage>(FindObjectsInactive.Include);
+
+        if (_stage == null)
+        {
+            _stage = gameObject.AddComponent<BattleStage>();
+            Debug.Log("[BattleManager] BattleStage 를 찾지 못해 런타임에 추가했습니다. " +
+                      "씬에 미리 붙여두면 인스펙터에서 대열 간격을 조절할 수 있습니다.");
+        }
+
+        return _stage;
+    }
+
+    /// <summary>모든 캐릭터의 조우 잠금을 푼다.</summary>
+    private void ReleaseEncounterGuard()
+    {
+        if (GameManager.GameInstance == null) return;
+
+        List<GameObject> _chars = GameManager.GameInstance.Characters;
+        if (_chars == null) return;
+
+        for (int i = 0; i < _chars.Count; i++)
+        {
+            if (_chars[i] == null) continue;
+
+            ActionController _ac = _chars[i].GetComponent<ActionController>();
+            if (_ac != null) _ac.ResetEncounter();
         }
     }
 
@@ -680,7 +829,9 @@ public class BattleManager : MonoBehaviour
 
         yield return new WaitForSeconds(0.5f);
 
-        SceneManager.LoadScene(FieldSceneName);
+        // 후퇴는 승리가 아니므로 조우한 몬스터가 필드에 되살아난다.
+        // BattleStage 가 플레이어를 뒤로 밀어내 즉시 재조우하지 않게 한다
+        yield return ReturnToFieldRoutine(false);
     }
 
     // 6. ESC / 우클릭으로 이전 상태(Select)로 복귀
@@ -1066,7 +1217,7 @@ public class BattleManager : MonoBehaviour
 
         yield return new WaitForSeconds(1.5f);
 
-        SceneManager.LoadScene(FieldSceneName);
+        yield return ReturnToFieldRoutine(victory);
     }
 
     /// <summary>

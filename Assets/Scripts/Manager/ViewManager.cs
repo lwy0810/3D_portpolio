@@ -215,24 +215,74 @@ public class ViewManager : MonoBehaviour
 
 
 
+    // 아래 넘김 메서드들은 전부 null 가드가 있어야 한다.
+    // 전투 UI 를 Field 씬으로 옮기기 전에는 "전투 씬에 있으니 참조가 반드시 있다" 는
+    // 전제가 성립했지만, 이제 같은 씬에서 필드/전투를 오가므로 참조가 없는 시점이 생긴다.
+    // 예전에는 여기서 NullReferenceException 이 났다.
+
     public void CommandBattleViewShow(bool active)
     {
+        if (_commandBattleView == null) return;
         _commandBattleView.gameObject.SetActive(active);
     }
 
     public void CommandBattleViewActive(ViewCategory _viewCategory, bool active)
     {
+        if (_commandBattleView == null) return;
         _commandBattleView.ViewShow(_viewCategory, active);
     }
 
     public Vector3 CommandAreaPosSet(Vector3 _lookPos)
     {
+        if (_commandBattleView == null) return Vector3.zero;
         return _commandBattleView.CommandAreaPosSet(_lookPos);
     }
 
     public Vector3 MonsterTargetViewPosSet(int index)
     {
+        if (_commandBattleView == null) return Vector3.zero;
         return _commandBattleView.TargetViewPosSet(index);
+    }
+
+    // ── 필드 ↔ 전투 UI 교체 ──────────────────────────────────
+    //
+    // 예전에는 씬 로드가 이 일을 대신했다. 씬을 갈지 않으므로
+    // 어느 UI 를 켜고 끌지 명시적으로 전환해야 한다.
+
+    /// <summary>전투 UI 를 켜고 필드 UI 를 끈다.</summary>
+    public void EnterBattleUI()
+    {
+        UIConnect();
+
+        if (_keyInfo != null) _keyInfo.gameObject.SetActive(false);
+        if (_characterView != null) _characterView.gameObject.SetActive(false);
+        if (_map != null) _map.gameObject.SetActive(false);
+        if (_fieldMenuView != null) _fieldMenuView.gameObject.SetActive(false);
+
+        IsMenuActive = false;
+
+        if (_commandBattleView != null)
+        {
+            _commandBattleView.gameObject.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("[ViewManager] CommandBattleView 가 연결되지 않아 전투 UI 를 켤 수 없습니다. " +
+                           "인스펙터의 Command Battle View 칸을 확인하세요.");
+        }
+    }
+
+    /// <summary>필드 UI 를 켜고 전투 UI 를 끈다.</summary>
+    public void ExitBattleUI()
+    {
+        if (_commandBattleView != null) _commandBattleView.gameObject.SetActive(false);
+
+        UIConnect();
+
+        if (_keyInfo != null) _keyInfo.gameObject.SetActive(true);
+        if (_characterView != null) _characterView.gameObject.SetActive(false);
+
+        IsMenuActive = false;
     }
 
     //public void MonsterInfoSet(string _name, int _hp)

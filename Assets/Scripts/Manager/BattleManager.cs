@@ -49,8 +49,20 @@ public class BattleManager : MonoBehaviour
     [SerializeField] private float _flashOut = 0.35f;
     [SerializeField] private Color _flashColor = Color.white;
 
+    [Header("공격 이동 회피")]
+    [Tooltip("이동 경로에 다른 유닛이 있으면 옆으로 비켜 간다. 끄면 직선으로 밀고 들어간다")]
+    [SerializeField] private bool _avoidUnitsWhileMoving = true;
+    [Tooltip("전방 몇 m 앞의 유닛까지 고려할지")]
+    [SerializeField] private float _avoidLookAhead = BattleSteering.DefaultLookAhead;
+    [Tooltip("스쳐 지날 때 두 반지름 합에 더할 여유(m)")]
+    [SerializeField] private float _avoidClearance = BattleSteering.DefaultClearance;
+
     /// <summary>필드 ↔ 전투 전환 연출 중인지. 이 동안에는 입력과 전투 로직을 멈춘다.</summary>
     public bool IsTransitioning { get; private set; }
+
+    // 회피 계산에 넘길 장애물 목록. 매 프레임 새로 할당하지 않도록 재사용한다
+    private BattleSteering.Obstacle[] _obstacleBuffer = new BattleSteering.Obstacle[16];
+    private int _obstacleCount;
 
     // ── 세팅 검사 ────────────────────────────────────────────────
     //
@@ -1306,6 +1318,10 @@ public class BattleManager : MonoBehaviour
         if (_approachDir.sqrMagnitude < 0.0001f) _approachDir = Vector3.back;
         _approachDir = _approachDir.normalized;
 
+        // 회피 대상 수집. 공격자와 방어자는 제외한다.
+        // 방어자는 접근 목표이므로 피할 대상이 아니다 (approachDistance 앞에서 멈춘다)
+        GatherObstacles(_attacker, _defender);
+
         // 달리기 재생은 루프 진입 전에 한 번만 한다.
         // 매 프레임 CrossFade 를 부르면 전환이 계속 다시 시작되어 목적 상태의
         // 시간이 0 에서 멈춘 채 포즈가 굳는다 (제자리에서 미끄러지는 것처럼 보임).
@@ -1329,7 +1345,18 @@ public class BattleManager : MonoBehaviour
                 break;
             }
 
-            Vector3 dir = toTarget.normalized;
+            // 경로에 동료가 있으면 옆으로 비켜 간다.
+            //
+            // 직선으로 밀고 들어가면 CharacterController 가 상대 캡슐의 둥근 면을
+            // 타고 올라가, 동료 머리를 밟고 넘어가는 것처럼 보인다.
+            Vector3 dir = _avoidUnitsWhileMoving
+                ? BattleSteering.Steer(_attacker.transform.position, endPos,
+                                       _obstacleBuffer, _obstacleCount,
+                                       UnitRadius(_attacker), _avoidLookAhead, _avoidClearance)
+                : toTarget.normalized;
+
+            if (dir == Vector3.zero) dir = toTarget.normalized;
+
             MoveUnit(_attacker, _controller, dir * moveSpeedUnits * Time.deltaTime);
             _attacker.transform.rotation = Quaternion.LookRotation(dir);
 
@@ -1398,6 +1425,46 @@ public class BattleManager : MonoBehaviour
     /// CharacterController 가 있으면 그것으로, 없으면 Transform 으로 옮긴다.
     /// 몬스터 프리팹에 CharacterController 가 없어도 같은 연출이 돌아간다.
     /// </summary>
+    /// <summary>
+    /// 회피 계산에 쓸 장애물 목록을 채운다. 전투 중 유닛은 거의 움직이지 않으므로
+    /// 이동 루프마다 한 번만 모으면 충분하다.
+    /// </summary>
+    private void GatherObstacles(Unit _attacker, Unit _defender)
+    {
+        _obstacleCount = 0;
+
+        if (!_avoidUnitsWhileMoving) return;
+        if (GameManager.GameInstance == null) return;
+
+        List<Unit> _units = GameManager.GameInstance.Units;
+        if (_units == null) return;
+
+        for (int i = 0; i < _units.Count; i++)
+        {
+            Unit _u = _units[i];
+
+            if (_u == null) continue;
+            if (_u == _attacker || _u == _defender) continue;
+            if (!_u.gameObject.activeInHierarchy) continue;
+            if (_u.Stat != null && _u.Stat.Hp <= 0) continue;
+
+            if (_obstacleCount >= _obstacleBuffer.Length) break;
+
+            _obstacleBuffer[_obstacleCount].Position = _u.transform.position;
+            _obstacleBuffer[_obstacleCount].Radius = UnitRadius(_u);
+            _obstacleCount++;
+        }
+    }
+
+    /// <summary>유닛의 수평 반지름. CharacterController 가 있으면 그 값을 쓴다.</summary>
+    private static float UnitRadius(Unit _unit)
+    {
+        if (_unit == null) return 0.5f;
+
+        CharacterController _cc = _unit.GetComponent<CharacterController>();
+        return _cc != null ? _cc.radius : 0.5f;
+    }
+
     /// <summary>
     /// 유닛 이동. 전투 영역 밖으로는 나가지 않는다.
     ///

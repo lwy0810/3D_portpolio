@@ -25,8 +25,9 @@ public class BattleStage : MonoBehaviour
     [Header("지면 맞춤")]
     [Tooltip("대열 위치를 지면에 붙인다. 끄면 조우 시점의 플레이어 높이를 그대로 쓴다")]
     [SerializeField] private bool _snapToGround = true;
-    [Tooltip("지면을 찾을 때 위로 올라가 쏘기 시작하는 높이(m)")]
-    [SerializeField] private float _probeUp = 3.0f;
+    [Tooltip("지면을 찾을 때 위로 올라가 쏘기 시작하는 높이(m). " +
+             "경사에서 이 값보다 지형이 높으면 광선이 지형 안에서 시작해 아무것도 못 찾는다")]
+    [SerializeField] private float _probeUp = 12.0f;
     [Tooltip("지면을 찾을 때 아래로 훑는 거리(m)")]
     [SerializeField] private float _probeDown = 12.0f;
 
@@ -37,6 +38,16 @@ public class BattleStage : MonoBehaviour
     [SerializeField] private bool _showArea = true;
     [Tooltip("몬스터 타깃 원판을 지면에서 띄우는 높이(m). 0 이면 지면에 파묻혀 보인다")]
     [SerializeField] private float _targetAreaLift = 0.08f;
+
+    [Header("발 높이 보정")]
+    [Tooltip("CharacterController 캡슐 하단을 지면에 맞춘다. " +
+             "프리팹 피벗이 발밑에 없는 경우를 보정하지만, 원인이 다르면 반대로 떠오른다. " +
+             "Log Placement 로 실측을 확인한 뒤 켤 것")]
+    [SerializeField] private bool _alignFeetToCollider = false;
+    [Tooltip("피벗을 올리는 보정값(m). 파묻히면 양수, 떠 보이면 음수. 가장 확실한 즉시 조절 수단")]
+    [SerializeField] private float _footNudge = 0.0f;
+    [Tooltip("배치 결과를 로그로 남긴다. 발 높이 원인을 좁히는 용도")]
+    [SerializeField] private bool _logPlacement = true;
 
     [Header("전투 후")]
     [Tooltip("후퇴·패배로 돌아왔을 때 몬스터에게서 밀어내는 거리(m). 0 이면 즉시 재조우한다")]
@@ -151,7 +162,8 @@ public class BattleStage : MonoBehaviour
             if (_comp == null || _comp.Stat == null || _comp.Stat.Hp <= 0) continue;
 
             _c.SetActive(true);
-            Teleport(_c, _allySlots[_slot].Position, _allySlots[_slot].Rotation);
+            Teleport(_c, FootAdjusted(_c, _allySlots[_slot].Position), _allySlots[_slot].Rotation);
+            LogPlacement(_c, _allySlots[_slot].Position);
             _slot++;
 
             _gm.CharacterComponents.Add(_comp);
@@ -180,11 +192,17 @@ public class BattleStage : MonoBehaviour
 
         _spawned.AddRange(_made);
 
-        // 타깃 원판을 지면에서 살짝 띄운다. 대열을 hit.point 에 정확히 맞추므로
-        // 그냥 두면 원판이 지형과 같은 높이가 되어 일부가 파묻힌다
+        // 발 높이 보정과 타깃 원판 띄우기.
+        //
+        // UnitCreateSystem 은 슬롯(지면) 위치에 그대로 생성한다. 프리팹마다
+        // 피벗과 콜라이더 하단의 관계가 달라서, 여기서 프리팹별로 보정한다.
         for (int i = 0; i < _made.Count; i++)
         {
             if (_made[i] == null) continue;
+
+            Vector3 _slotPos = _enemySlots[Mathf.Min(i, _enemySlots.Length - 1)].Position;
+            _made[i].transform.position = FootAdjusted(_made[i], _slotPos);
+            LogPlacement(_made[i], _slotPos);
 
             Monster _m = _made[i].GetComponent<Monster>();
             if (_m != null) _m.LiftTargetArea(_targetAreaLift);
@@ -290,7 +308,7 @@ public class BattleStage : MonoBehaviour
 
                 if (_c == _leader)
                 {
-                    Teleport(_c, _returnPos, _snapshot.LeaderRot);
+                    Teleport(_c, FootAdjusted(_c, _returnPos), _snapshot.LeaderRot);
                     _c.SetActive(true);
                     continue;
                 }
@@ -356,6 +374,66 @@ public class BattleStage : MonoBehaviour
 
     // ── 도우미 ──────────────────────────────────────────────
 
+    /// <summary>
+    /// 슬롯(지면 위치)에 유닛을 세울 때의 실제 피벗 위치.
+    ///
+    /// 프리팹의 피벗이 항상 발밑에 있지는 않다. CharacterController 의 캡슐 하단이
+    /// 피벗과 같은 높이여야 피벗을 지면에 그대로 놓을 수 있다.
+    /// Bear 는 Height 1 / Radius 1 / Center.y 0.5 이므로 Unity 가 반지름 1 의 구로
+    /// 취급하고 하단이 피벗보다 0.5m 아래에 있다. 그래서 피벗을 지면에 놓으면
+    /// 그만큼 파묻힌다. Ubi 는 Height 1.6 / Radius 0.5 / Center.y 0.8 로 보정값이 0 이다.
+    ///
+    /// skinWidth 는 더하지 않는다. 안쪽 여유이므로 더하면 반대로 떠오른다.
+    /// (이전에 SnapToGround 에서 skinWidth 를 더해 캐릭터가 8cm 떠 있던 적이 있다)
+    /// </summary>
+    private Vector3 FootAdjusted(GameObject obj, Vector3 slotPos)
+    {
+        if (obj == null) return slotPos;
+
+        Vector3 _p = slotPos;
+        _p.y = slotPos.y - FootOffset(obj) + _footNudge;
+        return _p;
+    }
+
+    /// <summary>캡슐 하단이 피벗 기준 어디에 있는지. 음수면 피벗보다 아래.</summary>
+    private float FootOffset(GameObject obj)
+    {
+        if (!_alignFeetToCollider) return 0.0f;
+
+        CharacterController _cc = obj.GetComponent<CharacterController>();
+        if (_cc == null) return 0.0f;
+
+        // Height 가 2 * Radius 보다 작으면 Unity 는 캡슐이 아니라 구로 취급한다
+        float _half = Mathf.Max(_cc.height * 0.5f, _cc.radius);
+        return _cc.center.y - _half;
+    }
+
+    /// <summary>발 높이가 안 맞을 때 원인을 좁히기 위한 로그.</summary>
+    private void LogPlacement(GameObject obj, Vector3 slotPos)
+    {
+        if (!_logPlacement || obj == null) return;
+
+        CharacterController _cc = obj.GetComponent<CharacterController>();
+
+        float _meshLow = float.NaN;
+        Renderer[] _rs = obj.GetComponentsInChildren<Renderer>();
+        for (int i = 0; i < _rs.Length; i++)
+        {
+            if (_rs[i] == null) continue;
+            if (_rs[i] is SpriteRenderer) continue;   // 타깃 원판은 바닥에 깔려 있어 기준이 될 수 없다
+
+            float _b = _rs[i].bounds.min.y;
+            if (float.IsNaN(_meshLow) || _b < _meshLow) _meshLow = _b;
+        }
+
+        string _ccInfo = _cc != null
+            ? $"H {_cc.height:F2} / R {_cc.radius:F2} / C.y {_cc.center.y:F2} → 하단 {FootOffset(obj):+0.000;-0.000}"
+            : "없음";
+
+        Debug.Log($"[BattleStage] {obj.name} 배치 — 지면 Y {slotPos.y:F3} / 피벗 Y {obj.transform.position.y:F3} / " +
+                  $"메시 최저 Y {_meshLow:F3} / CharacterController {_ccInfo}");
+    }
+
     private void SnapSlots(BattleFormation.Slot[] slots, int count, float fallbackY)
     {
         for (int i = 0; i < count; i++)
@@ -397,6 +475,12 @@ public class BattleStage : MonoBehaviour
                 _best = _hits[i].point.y;
                 _found = true;
             }
+        }
+
+        if (!_found)
+        {
+            Debug.LogWarning($"[BattleStage] {pos} 에서 지면을 찾지 못해 {fallbackY:F3} 을 사용합니다. " +
+                             $"Probe Up({_probeUp}m) 이 지형 높이차보다 작으면 광선이 지형 안에서 시작합니다.");
         }
 
         return _found ? _best : fallbackY;

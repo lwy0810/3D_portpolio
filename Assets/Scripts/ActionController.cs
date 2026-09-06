@@ -57,11 +57,11 @@ public class ActionController : MonoBehaviour
     {
         if(ViewManager.ViewInstance.IsMenuActive == false)
         {
-            if (SceneManager.GetActiveScene().name == "Field")
+            if (GameFlow.IsField)
             {
                 CharacterMove();
             }
-            else if (SceneManager.GetActiveScene().name == "CommandBattle")
+            else if (GameFlow.IsBattle)
             {
             }
         }
@@ -99,7 +99,7 @@ public class ActionController : MonoBehaviour
 
         if (Input.GetMouseButtonDown(0) && !_isAttack)
         {
-            if (SceneManager.GetActiveScene().name == "Field")
+            if (GameFlow.IsField)
             {
                 CurrentPlayerState = PlayerState.Attack;
             }
@@ -208,10 +208,10 @@ public class ActionController : MonoBehaviour
 
         if (other.gameObject.CompareTag("Monster"))
         {
-            if (SceneManager.GetActiveScene().name == "Field")
+            if (GameFlow.IsField)
             {
                 _encounterTriggered = true;
-                SceneManager.LoadScene("CommandBattle");
+                SceneManager.LoadScene(GameFlow.BattleSceneName);
             }
 
         }

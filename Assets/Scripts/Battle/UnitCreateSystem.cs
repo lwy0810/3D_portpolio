@@ -27,7 +27,7 @@ public class UnitCreateSystem : MonoBehaviour
 
         for (int i = 0; i < _characterPrefabs.Length; i++)
         {
-            if (SceneManager.GetActiveScene().name == "Field")
+            if (GameFlow.IsField)
             {
                 Vector3 basePos = GameManager.GameInstance.IsInit ? InitCharacterPos : returnCharacterPos;
 
@@ -36,7 +36,7 @@ public class UnitCreateSystem : MonoBehaviour
 
                 if (i > 0) GameManager.GameInstance.Characters[i].SetActive(false);
             }
-            else if (SceneManager.GetActiveScene().name == "CommandBattle")
+            else if (GameFlow.IsBattle)
             {
                 GameManager.GameInstance.Characters.Add(
                     Instantiate(_characterPrefabs[i], Vector3.zero + (i * battlePositionOffest), Quaternion.identity));
@@ -66,7 +66,7 @@ public class UnitCreateSystem : MonoBehaviour
 
         CsvTable.Row row = csv.Rows[0];
 
-        if (SceneManager.GetActiveScene().name == "Field")
+        if (GameFlow.IsField)
         {
             Vector3 basePos = GameManager.GameInstance.IsInit ? InitMonsterPos : returnMonsterPos;
 
@@ -75,7 +75,7 @@ public class UnitCreateSystem : MonoBehaviour
 
             MonsterStat(row, GameManager.GameInstance.Monster.GetComponent<Monster>());
         }
-        else if (SceneManager.GetActiveScene().name == "CommandBattle")
+        else if (GameFlow.IsBattle)
         {
             for (int i = 0; i < BattleMonsterCount; i++)
             {

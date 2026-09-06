@@ -22,8 +22,9 @@ public class BattleManager : MonoBehaviour
         MonsterTurn
     };
 
-    private const string FieldSceneName = "Field";
-    private const string CommandBattleSceneName = "CommandBattle";
+    // 씬 이름은 GameFlow 가 단일 출처다. 여기서 다시 선언하면 두 곳이 어긋날 수 있다.
+    private const string FieldSceneName = GameFlow.FieldSceneName;
+    private const string CommandBattleSceneName = GameFlow.BattleSceneName;
 
     [SerializeField] private GameObject _commandBattleMemberPrefab;
 
@@ -36,6 +37,108 @@ public class BattleManager : MonoBehaviour
 
     // AT 큐. 없으면 Battle() 에서 직접 붙인다
     [SerializeField] private BattleFlow _flow;
+
+    // ── 세팅 검사 ────────────────────────────────────────────────
+    //
+    // 전투 UI 와 BattleManager 를 CommandBattle 씬에서 Field 씬으로 옮기고 나면
+    // 인스펙터 참조가 살아남았는지 확인해야 한다. Play 를 눌러 예외를 만나기 전에
+    // 컴포넌트 톱니바퀴 메뉴 → [전투 세팅 검사] 로 즉시 확인할 수 있다.
+
+    [ContextMenu("전투 세팅 검사")]
+    public void ValidateBattleSetup()
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        int bad = 0;
+
+        sb.AppendLine("=== 전투 세팅 검사 ===");
+        sb.AppendLine($"이 BattleManager 가 있는 씬 : {gameObject.scene.name}");
+
+        bad += Line(sb, "CreateCommandActionMemberSystem 컴포넌트",
+                    GetComponent<CreateCommandActionMemberSystem>() != null,
+                    "같은 오브젝트에 붙어 있어야 합니다. 옮길 때 컴포넌트가 빠졌습니다.");
+
+        bad += Line(sb, "CreateCommandBattleMemberSystem 컴포넌트",
+                    GetComponent<CreateCommandBattleMemberSystem>() != null,
+                    "같은 오브젝트에 붙어 있어야 합니다.");
+
+        bad += Line(sb, "_commandActionPos (ActionMemberPos)",
+                    _commandActionPos != null,
+                    "ActionBar/Bar/ActionMemberPos 를 다시 끌어다 넣으세요.",
+                    _commandActionPos != null ? _commandActionPos.name : "");
+
+        bad += Line(sb, "_commandBattlePos (CommandMemberBar)",
+                    _commandBattlePos != null,
+                    "CommandBattleView/CommandMemberBar 를 다시 끌어다 넣으세요.",
+                    _commandBattlePos != null ? _commandBattlePos.name : "");
+
+        bad += Line(sb, "_actionBar",
+                    _actionBar != null,
+                    "CommandBattleView/ActionBar 의 ActionBar 컴포넌트를 넣으세요.",
+                    _actionBar != null ? _actionBar.gameObject.name : "");
+
+        bad += Line(sb, "_commandBattleMemberPrefab",
+                    _commandBattleMemberPrefab != null,
+                    "프리팹 에셋이므로 씬을 옮겨도 유지됩니다. 비어 있다면 원래부터 비어 있었습니다.",
+                    _commandBattleMemberPrefab != null ? _commandBattleMemberPrefab.name : "");
+
+        // 씬 안에 전투 UI 가 실제로 있는지 (비활성 오브젝트도 포함해 찾는다)
+        CommandBattleView _view = FindFirstObjectByType<CommandBattleView>(FindObjectsInactive.Include);
+        bad += Line(sb, "씬에 CommandBattleView 존재",
+                    _view != null,
+                    "전투 UI 를 Field 씬의 Canvas 아래로 옮기지 않았습니다.",
+                    _view != null ? _view.gameObject.scene.name + " 씬" : "");
+
+        ViewManager _vm = FindFirstObjectByType<ViewManager>(FindObjectsInactive.Include);
+        if (_vm == null)
+        {
+            bad += Line(sb, "씬에 ViewManager 존재", false, "Field 씬에 ViewManager 가 있어야 합니다.");
+        }
+        else
+        {
+            bad += Line(sb, "ViewManager._commandBattleView 연결",
+                        _vm.HasCommandBattleView,
+                        "ViewManager 인스펙터의 Command Battle View 칸에 옮긴 CommandBattleView 를 넣으세요. " +
+                        "비어 있어도 실행 중 Reconnect 로 찾지만, 명시하는 편이 안전합니다.",
+                        _vm.CommandBattleViewName);
+        }
+
+        // 중복 매니저는 Awake 에서 한쪽이 Destroy 되지만, 어느 쪽이 살지는 순서에 달려 있다
+        BattleManager[] _managers = FindObjectsByType<BattleManager>(FindObjectsInactive.Include,
+                                                                     FindObjectsSortMode.None);
+        bad += Line(sb, "BattleManager 중복 없음",
+                    _managers.Length == 1,
+                    $"씬에 {_managers.Length} 개 있습니다. CommandBattle 씬의 것을 지우거나 " +
+                    "Field 씬의 것 하나만 남기세요.",
+                    _managers.Length + "개");
+
+        // BattleManager 는 참조가 비었을 때 이름으로 찾는 폴백이 있다. 그 이름이 유효한지도 본다
+        bool _findable = GameObject.Find("ActionBar") != null;
+        sb.AppendLine(_findable
+            ? "[참고] GameObject.Find(\"ActionBar\") 폴백도 동작합니다."
+            : "[참고] GameObject.Find(\"ActionBar\") 폴백은 동작하지 않습니다 " +
+              "(비활성 상태이거나 이름이 다름). 인스펙터 참조가 반드시 있어야 합니다.");
+
+        sb.AppendLine(bad == 0
+            ? "=== 문제 없음. 전투 세팅이 이 씬에서 완결됩니다. ==="
+            : $"=== 문제 {bad}건. 위 [문제] 항목을 고치세요. ===");
+
+        if (bad == 0) Debug.Log(sb.ToString());
+        else Debug.LogWarning(sb.ToString());
+    }
+
+    /// <summary>검사 한 줄. 문제면 1 을 돌려준다.</summary>
+    private int Line(System.Text.StringBuilder sb, string label, bool ok, string how, string detail = "")
+    {
+        if (ok)
+        {
+            sb.AppendLine($"[정상] {label}" + (string.IsNullOrEmpty(detail) ? "" : $" — {detail}"));
+            return 0;
+        }
+
+        sb.AppendLine($"[문제] {label}");
+        sb.AppendLine($"        조치: {how}");
+        return 1;
+    }
 
     // 이번 행동에 쓰인 BaseDelay. 턴이 끝날 때 큐에 넣는 값이다
     private int _lastActionBaseDelay = AT.BaseAttack;
@@ -158,26 +261,29 @@ public class BattleManager : MonoBehaviour
     {
         _camera = Camera.main;
 
-        for (int i = 0; i < GameManager.GameInstance.Monsters.Count; i++)
-        {
-            Monsters.Add(GameManager.GameInstance.Monsters[i].GetComponent<Monster>());
-        }
-
-        for (int i = 0; i < GameManager.GameInstance.Characters.Count; i++)
-        {
-            Characters.Add(GameManager.GameInstance.Characters[i].GetComponent<Character>());
-        }
-
-        _characterTarget = GameManager.GameInstance.Units[0].gameObject.transform.Find("LookPos");
-        _monsterTarget = GameManager.GameInstance.Monsters[0].transform.Find("LookPos");
-
-        _camera.transform.position = _characterTarget.position + new Vector3(0.0f, 0.0f, -4.0f);
-        _characterScreenPos = ViewManager.ViewInstance.CommandAreaPosSet(_characterTarget.position);
+        // 전투 대열 수집과 카메라 배치는 여기서 하지 않는다.
+        //
+        // 예전에는 Start() 에서 GameManager.Units[0] 을 바로 읽었다. 이 오브젝트가
+        // 전투 씬에만 있어서 "Start 가 도는 시점 = 전투 시작" 이 성립했기 때문이다.
+        // Field 씬으로 옮기면 필드에서도 Start 가 돌고, 그 시점의 Units 는 비어 있어
+        // IndexOutOfRange 가 난다. 게다가 필드 카메라를 전투 위치로 끌어당겨 버린다.
+        //
+        // 어차피 Battle() 이 대열을 다시 수집하므로(두 번째 전투 대비),
+        // 카메라·주시 대상 설정만 InitBattleView() 로 떼어냈다.
+        //
+        // 전투 상태로 시작한 경우엔 여기서도 한 번 부른다. Battle() 은 코루틴이
+        // 한 프레임 미룬 뒤에 돌기 때문에, 이걸 빼면 첫 프레임이 전투 카메라가
+        // 잡히기 전의 각도로 한 번 그려진다.
+        if (GameFlow.IsBattle) InitBattleView();
     }
 
 
     void Update()
     {
+        // 필드에서는 전투 입력도 전투 UI 갱신도 하지 않는다.
+        // Field 씬으로 옮긴 뒤에는 이 컴포넌트가 필드에서도 계속 살아 있다.
+        if (!GameFlow.IsBattle) return;
+
         CommandUISet();
         CommandSelectController();
         CameraZoom();
@@ -188,7 +294,7 @@ public class BattleManager : MonoBehaviour
     // 배틀 씬 진입 시, 배틀 유닛 전투 순서 정렬 및 액션 멤버, 배틀 멤버 생성
     public void Battle()
     {
-        if (SceneManager.GetActiveScene().name != CommandBattleSceneName)
+        if (!GameFlow.IsBattle)
         {
             return;
         }
@@ -283,8 +389,55 @@ public class BattleManager : MonoBehaviour
         _battleMemberList = _createCommandBattleMemberSystem.
             CreateCommandBattleMember(_commandBattleMemberPrefab, _commandBattlePos);
 
-        // 5. 첫 턴 시작. 선두가 몬스터면 자동으로 행동한다.
+        // 5. 카메라와 주시 대상. 대열이 확정된 뒤에 잡아야 한다.
+        InitBattleView();
+
+        // 6. 첫 턴 시작. 선두가 몬스터면 자동으로 행동한다.
         StartTurn();
+    }
+
+    /// <summary>
+    /// 전투 카메라와 주시 대상 설정. 예전에 Start() 가 하던 일이다.
+    /// 대열(Units / Monsters)이 채워진 뒤에 불러야 한다.
+    /// 하나라도 없으면 경고만 남기고 조용히 빠진다 — 여기서 예외가 나면
+    /// 전투가 시작되지 않은 채 UI 만 켜진 상태로 남는다.
+    /// </summary>
+    private void InitBattleView()
+    {
+        if (_camera == null) _camera = Camera.main;
+
+        List<Unit> _units = GameManager.GameInstance != null
+            ? GameManager.GameInstance.Units
+            : null;
+
+        if (_units == null || _units.Count == 0 || _units[0] == null)
+        {
+            Debug.LogWarning("[BattleManager] 전투 대열이 비어 있어 카메라 대상을 잡지 못했습니다.");
+            return;
+        }
+
+        _characterTarget = _units[0].gameObject.transform.Find("LookPos");
+
+        if (Monsters.Count > 0 && Monsters[0] != null)
+        {
+            _monsterTarget = Monsters[0].transform.Find("LookPos");
+        }
+
+        if (_characterTarget == null)
+        {
+            Debug.LogWarning($"[BattleManager] {_units[0].name} 에 LookPos 자식이 없습니다.");
+            return;
+        }
+
+        if (_camera != null)
+        {
+            _camera.transform.position = _characterTarget.position + new Vector3(0.0f, 0.0f, -4.0f);
+        }
+
+        if (ViewManager.ViewInstance != null)
+        {
+            _characterScreenPos = ViewManager.ViewInstance.CommandAreaPosSet(_characterTarget.position);
+        }
     }
 
     // ── 턴 진행 ─────────────────────────────────────────────

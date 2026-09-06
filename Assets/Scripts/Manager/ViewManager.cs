@@ -50,7 +50,7 @@ public class ViewManager : MonoBehaviour
     void Update()
     {
 
-        if (SceneManager.GetActiveScene().name == "Field")
+        if (GameFlow.IsField)
         {
             if (Input.GetKeyDown(KeyCode.E))
             {
@@ -81,9 +81,9 @@ public class ViewManager : MonoBehaviour
     /// </summary>
     private void UIConnect()
     {
-        string _scene = SceneManager.GetActiveScene().name;
+        GameState _state = GameFlow.State;
 
-        if (_scene == "Field")
+        if (_state == GameState.Field)
         {
             _keyInfo = Reconnect(_keyInfo);
             _characterView = Reconnect(_characterView);
@@ -94,7 +94,7 @@ public class ViewManager : MonoBehaviour
 
             _keyInfoComponent = _keyInfo;
         }
-        else if (_scene == "CommandBattle")
+        else if (_state == GameState.Battle)
         {
             _commandBattleView = Reconnect(_commandBattleView);
         }
@@ -119,11 +119,11 @@ public class ViewManager : MonoBehaviour
 
     private void UIShow()
     {
-        if (SceneManager.GetActiveScene().name == "Field")
+        if (GameFlow.IsField)
         {
             FieldUIShow(true);
         }
-        else if (SceneManager.GetActiveScene().name == "CommandBattle")
+        else if (GameFlow.IsBattle)
         {
 
             CommandBattleUIShow(true);
@@ -255,6 +255,16 @@ public class ViewManager : MonoBehaviour
             _characterView.CharacterViewInfoSet(_character);
         }
     }
+
+    /// <summary>
+    /// 전투 UI 참조가 연결돼 있는지. 세팅 검사기가 읽는다.
+    /// 참조 자체를 공개하지 않고 유무만 알려주므로 외부에서 뷰를 직접 만질 수는 없다.
+    /// </summary>
+    public bool HasCommandBattleView => _commandBattleView != null;
+
+    /// <summary>연결된 전투 UI 오브젝트 이름. 없으면 빈 문자열.</summary>
+    public string CommandBattleViewName =>
+        _commandBattleView != null ? _commandBattleView.gameObject.name : "";
 
     public bool CharacterViewIsActive()
     {

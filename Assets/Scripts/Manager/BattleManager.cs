@@ -49,20 +49,23 @@ public class BattleManager : MonoBehaviour
     [SerializeField] private float _flashOut = 0.35f;
     [SerializeField] private Color _flashColor = Color.white;
 
-    [Header("공격 이동 회피")]
-    [Tooltip("이동 경로에 다른 유닛이 있으면 옆으로 비켜 간다. 끄면 직선으로 밀고 들어간다")]
-    [SerializeField] private bool _avoidUnitsWhileMoving = true;
-    [Tooltip("전방 몇 m 앞의 유닛까지 고려할지")]
-    [SerializeField] private float _avoidLookAhead = BattleSteering.DefaultLookAhead;
+    [Header("공격 이동 경로")]
+    [Tooltip("이동 전에 다른 유닛을 피하는 경로를 계산한다. 끄면 목표까지 직선으로 간다")]
+    [SerializeField] private bool _planPathAroundUnits = true;
     [Tooltip("스쳐 지날 때 두 반지름 합에 더할 여유(m)")]
-    [SerializeField] private float _avoidClearance = BattleSteering.DefaultClearance;
+    [SerializeField] private float _pathClearance = BattlePath.DefaultClearance;
+    [Tooltip("이동 중 정지한 유닛의 CharacterController 를 끈다. 몸을 타고 오르는 것을 물리적으로 막는다")]
+    [SerializeField] private bool _disableIdleColliders = true;
 
     /// <summary>필드 ↔ 전투 전환 연출 중인지. 이 동안에는 입력과 전투 로직을 멈춘다.</summary>
     public bool IsTransitioning { get; private set; }
 
-    // 회피 계산에 넘길 장애물 목록. 매 프레임 새로 할당하지 않도록 재사용한다
-    private BattleSteering.Obstacle[] _obstacleBuffer = new BattleSteering.Obstacle[16];
+    // 경로 계산에 넘길 장애물 목록. 매번 새로 할당하지 않도록 재사용한다
+    private BattlePath.Obstacle[] _obstacleBuffer = new BattlePath.Obstacle[16];
     private int _obstacleCount;
+
+    // 계산된 경로. 마지막 항목이 목표 지점이다
+    private Vector3[] _waypoints = new Vector3[8];
 
     // ── 세팅 검사 ────────────────────────────────────────────────
     //
@@ -351,6 +354,9 @@ public class BattleManager : MonoBehaviour
         EnsureBattleSystems();
         EnsureActionBar();
 
+        // 이전 전투에서 꺼진 채 남은 콜라이더가 없도록 보장한다
+        SetOtherControllers(null, true);
+
         _isBattleOver = false;
         IsAttack = false;
         TurnOff = false;
@@ -593,6 +599,10 @@ public class BattleManager : MonoBehaviour
         // 전투용 몬스터 정리와 캐릭터 복구
         BattleStage _st = EnsureStage();
         if (_st != null) _st.RestoreField(victory);
+
+        // 이동 중 껐던 콜라이더가 남아 있을 수 있다.
+        // 코루틴이 비정상 종료된 경우를 대비해 여기서 한 번 더 되돌린다
+        SetOtherControllers(null, true);
 
         // 전투 상태 정리. 다음 전투가 이전 목록을 물려받지 않게 한다
         Characters.Clear();
@@ -1309,6 +1319,7 @@ public class BattleManager : MonoBehaviour
 
         const float moveSpeedUnits = 5.0f;
         const float arriveThreshold = 0.1f;
+        const float waypointThreshold = 0.35f;   // 중간 경유지는 느슨하게 통과한다
         const float approachDistance = 2.5f;
         const float maxSeconds = 3.0f; // 안전장치: 무슨 일이 있어도 이 시간 안에는 다음 단계로 넘어간다.
 
@@ -1322,46 +1333,79 @@ public class BattleManager : MonoBehaviour
         // 방어자는 접근 목표이므로 피할 대상이 아니다 (approachDistance 앞에서 멈춘다)
         GatherObstacles(_attacker, _defender);
 
+        // 목표 지점과 경로를 이동 전에 한 번 확정한다.
+        //
+        // 예전에는 매 프레임 목표를 다시 계산하고 그때그때 방향을 틀었다.
+        // 프레임별 판단이 옳아도 그 결과가 모이면 경로가 곡선이 되어 진입 금지 원을
+        // 파고들고, 결국 동료에게 몸을 비비며 밀고 들어갔다.
+        // 출발 전에 꺾인 직선들로 확정하면 각 구간이 원 밖임을 보장할 수 있다.
+        Vector3 _goal = BattleArea.ClampToArea(
+            _defender.transform.position + _approachDir * approachDistance);
+
+        int _wpCount = 0;
+
+        if (_planPathAroundUnits)
+        {
+            _wpCount = BattlePath.Plan(_attacker.transform.position, _goal,
+                                       _obstacleBuffer, _obstacleCount,
+                                       UnitRadius(_attacker), _pathClearance, _waypoints);
+        }
+
+        if (_wpCount <= 0)
+        {
+            _waypoints[0] = _goal;
+            _wpCount = 1;
+        }
+
         // 달리기 재생은 루프 진입 전에 한 번만 한다.
         // 매 프레임 CrossFade 를 부르면 전환이 계속 다시 시작되어 목적 상태의
         // 시간이 0 에서 멈춘 채 포즈가 굳는다 (제자리에서 미끄러지는 것처럼 보임).
         PlayRun(_animator, _useParams, moveSpeedUnits);
 
-        // 대상 앞까지 이동 (거리에 관계없이 목표 지점에 정확히 도달) (TC 118, 120)
-        float elapsed = 0f;
-        while (elapsed < maxSeconds)
+        // 정지한 유닛의 CharacterController 를 잠시 끈다.
+        //
+        // 경로가 진입 금지 원 밖이어도 skinWidth(0.05~0.08)와 수치 오차로 스치면
+        // 캡슐 곡면을 타고 오른다. 턴제라 다른 유닛은 이 동안 움직이지 않으므로
+        // 콜라이더가 없어도 문제가 없다. 경로 계산과 함께 두 겹으로 막는다.
+        if (_disableIdleColliders) SetOtherControllers(_attacker, false);
+
+        // 계산된 경로를 순서대로 따라간다 (TC 118, 120)
+        try
         {
-            // 연출 중 대상 · 공격자 파괴, 전투 종료 (TC 126)
-            if (_attacker == null || _defender == null || _isBattleOver) yield break;
+            float elapsed = 0f;
+            int _wp = 0;
 
-            // 목표 지점도 영역 안으로 당긴다. 밖이면 경계를 밀며 maxSeconds 를 다 쓴다
-            Vector3 endPos = BattleArea.ClampToArea(
-                _defender.transform.position + _approachDir * approachDistance);
-            Vector3 toTarget = endPos - _attacker.transform.position;
-            toTarget.y = 0f;
-
-            if (toTarget.magnitude <= arriveThreshold)
+            while (elapsed < maxSeconds && _wp < _wpCount)
             {
-                break;
+                // 연출 중 대상 · 공격자 파괴, 전투 종료 (TC 126)
+                if (_attacker == null || _defender == null || _isBattleOver) yield break;
+
+                Vector3 toTarget = _waypoints[_wp] - _attacker.transform.position;
+                toTarget.y = 0f;
+
+                // 마지막 지점만 도착 판정을 엄격히 본다. 중간 경유지는 스쳐 지나면 된다
+                float _reach = (_wp == _wpCount - 1) ? arriveThreshold : waypointThreshold;
+
+                if (toTarget.magnitude <= _reach)
+                {
+                    _wp++;
+                    continue;
+                }
+
+                Vector3 dir = toTarget.normalized;
+
+                MoveUnit(_attacker, _controller, dir * moveSpeedUnits * Time.deltaTime);
+                _attacker.transform.rotation = Quaternion.LookRotation(dir);
+
+                elapsed += Time.deltaTime;
+                yield return null;
             }
-
-            // 경로에 동료가 있으면 옆으로 비켜 간다.
-            //
-            // 직선으로 밀고 들어가면 CharacterController 가 상대 캡슐의 둥근 면을
-            // 타고 올라가, 동료 머리를 밟고 넘어가는 것처럼 보인다.
-            Vector3 dir = _avoidUnitsWhileMoving
-                ? BattleSteering.Steer(_attacker.transform.position, endPos,
-                                       _obstacleBuffer, _obstacleCount,
-                                       UnitRadius(_attacker), _avoidLookAhead, _avoidClearance)
-                : toTarget.normalized;
-
-            if (dir == Vector3.zero) dir = toTarget.normalized;
-
-            MoveUnit(_attacker, _controller, dir * moveSpeedUnits * Time.deltaTime);
-            _attacker.transform.rotation = Quaternion.LookRotation(dir);
-
-            elapsed += Time.deltaTime;
-            yield return null;
+        }
+        finally
+        {
+            // yield break 로 빠져나가도 반드시 되돌린다.
+            // 코루틴이 중단되면 Dispose 가 불려 이 블록이 실행된다
+            if (_disableIdleColliders) SetOtherControllers(_attacker, true);
         }
 
         StopRun(_animator, _useParams, _idleStateHash);
@@ -1433,7 +1477,7 @@ public class BattleManager : MonoBehaviour
     {
         _obstacleCount = 0;
 
-        if (!_avoidUnitsWhileMoving) return;
+        if (!_planPathAroundUnits) return;
         if (GameManager.GameInstance == null) return;
 
         List<Unit> _units = GameManager.GameInstance.Units;
@@ -1453,6 +1497,28 @@ public class BattleManager : MonoBehaviour
             _obstacleBuffer[_obstacleCount].Position = _u.transform.position;
             _obstacleBuffer[_obstacleCount].Radius = UnitRadius(_u);
             _obstacleCount++;
+        }
+    }
+
+    /// <summary>
+    /// 정지한 유닛들의 CharacterController 를 켜거나 끈다.
+    /// 이동 중 공격자가 다른 유닛의 캡슐을 타고 오르는 것을 물리적으로 막는다.
+    /// </summary>
+    private void SetOtherControllers(Unit _except, bool _enabled)
+    {
+        if (GameManager.GameInstance == null) return;
+
+        List<Unit> _units = GameManager.GameInstance.Units;
+        if (_units == null) return;
+
+        for (int i = 0; i < _units.Count; i++)
+        {
+            Unit _u = _units[i];
+
+            if (_u == null || _u == _except) continue;
+
+            CharacterController _cc = _u.GetComponent<CharacterController>();
+            if (_cc != null) _cc.enabled = _enabled;
         }
     }
 

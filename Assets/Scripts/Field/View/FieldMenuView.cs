@@ -234,15 +234,16 @@ public class FieldMenuView : MonoBehaviour
                 }
                 else
                 {
-       
                     FieldMenuViewUnShow();
                     ViewManager.ViewInstance.IsMenuActive = false;
                     if (this._homeView.transform.position.x < 200f)
                     {
                         Debug.Log(this._homeView.transform.position.x);
                     }
-                    
-                    
+                    ViewManager.ViewInstance.KeyInfoBarShow();
+
+
+
                 }
             }
         }

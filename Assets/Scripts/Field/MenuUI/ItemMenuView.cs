@@ -38,10 +38,10 @@ public class ItemMenuView : MonoBehaviour
 
     [Header("입력")]
     [Tooltip("1 / 3 키는 항상 동작한다. 여기 지정한 키는 추가로 받는다")]
-    [SerializeField] private KeyCode _prevCategoryKey = KeyCode.LeftArrow;
-    [SerializeField] private KeyCode _nextCategoryKey = KeyCode.RightArrow;
-    [SerializeField] private KeyCode _prevItemKey = KeyCode.UpArrow;
-    [SerializeField] private KeyCode _nextItemKey = KeyCode.DownArrow;
+    [SerializeField] private KeyCode _prevCategoryKey = KeyCode.Alpha1;
+    [SerializeField] private KeyCode _nextCategoryKey = KeyCode.Alpha3;
+    [SerializeField] private KeyCode _prevItemKey = KeyCode.W;
+    [SerializeField] private KeyCode _nextItemKey = KeyCode.S;
 
     [Tooltip("숨겨진 동안 키 입력을 무시한다. 문제가 생기면 끄면 항상 입력을 받는다")]
     [SerializeField] private bool _blockInputWhenHidden = true;

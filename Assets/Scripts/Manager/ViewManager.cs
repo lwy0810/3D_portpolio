@@ -63,6 +63,7 @@ public class ViewManager : MonoBehaviour
                     Debug.Log("1111");
                     _fieldMenuView.FieldMenuViewShow();
                     IsMenuActive = true;
+                    _keyInfo.gameObject.SetActive(false);
                 }
             }
 
@@ -330,6 +331,19 @@ public class ViewManager : MonoBehaviour
         }
     }
 
+    public void KeyInfoBarUnShow()
+    {
+        if (_keyInfo != null)
+        {
+            _keyInfo.gameObject.SetActive(false);
+        }
+    }
 
-
+    public void KeyInfoBarShow()
+    {
+        if (_keyInfo != null)
+        {
+            _keyInfo.gameObject.SetActive(true);
+        }
+    }
 }

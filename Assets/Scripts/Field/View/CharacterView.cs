@@ -7,7 +7,7 @@ public class CharacterView : MonoBehaviour
 {
     [SerializeField] private Image _background;
     [SerializeField] private Image _characterImage;
-    [SerializeField] private StatusView _statusView;
+    [SerializeField] private StatusMenuView _statusView;
 
     void Start()
     {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class StatusView : MonoBehaviour
+public class StatusMenuView : MonoBehaviour
 {
     // TopBar
     [SerializeField] private Text _nameText;
@@ -17,13 +17,17 @@ public class StatusView : MonoBehaviour
 
     // BottomBar
     [SerializeField] private Text _strValue;
+    [SerializeField] private Text _atsValue;
+    [SerializeField] private Text _spdValue;
+    [SerializeField] private Text _dexValue;
+    [SerializeField] private Text _aglValue;
+    [SerializeField] private Text _rngValue;
     [SerializeField] private Text _defValue;
-    [SerializeField] private Text _speedValue;
+    [SerializeField] private Text _adfValue;
+    [SerializeField] private Text _movValue;
     [SerializeField] private Text _hitValue;
-    [SerializeField] private Text _criValue;
-    [SerializeField] private Text _criDmgValue;
     [SerializeField] private Text _avoidValue;
-
+    [SerializeField] private Text _criValue;
     [SerializeField] private Image _characterImage;
 
     private List<Character> characters = new List<Character>();
@@ -69,11 +73,17 @@ public class StatusView : MonoBehaviour
         _epValue.text = _stat.Ep.ToString();
         _spValue.text = _stat.Cp.ToString();
         _strValue.text = _stat.Str.ToString();
+        _atsValue.text = _stat.Ats.ToString();
+        _spdValue.text = _stat.Speed.ToString();
+        _dexValue.text = _stat.Dex.ToString();
+        _aglValue.text = _stat.Agl.ToString();
+        _rngValue.text = _stat.Rng.ToString();
         _defValue.text = _stat.Def.ToString();
-        _speedValue.text = _stat.Speed.ToString();
+        _adfValue.text = _stat.Adf.ToString();
+        _movValue.text = _stat.Mov.ToString();
         _hitValue.text = $"{_stat.Hit * 100}%";
-        _criValue.text = $"{_stat.Critical * 100}%";
         _avoidValue.text = $"{_stat.Avoid * 100}%";
+        _criValue.text = $"{_stat.Critical * 100}%";
     }
 
     private void Unsubscribe()

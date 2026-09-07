@@ -40,6 +40,9 @@ public class Stat
     private int _speed;           // AT 딜레이의 분모
     private int _dex;             // 명중 3단 판정용
     private int _agl;             // 회피 3단 판정용
+    private int _mov;             // 이동력 (StatusMenuView 의 MOV 칸)
+    private int _range;           // 사거리 (StatusMenuView 의 RNG 칸). 스킬별 Range 와는 별개로,
+                                   // 캐릭터 스탯 화면에 표시되는 기본 사거리다
 
     // ── 확률 · 배율 ─────────────────────────────────────────
     private float _avoid;
@@ -72,6 +75,8 @@ public class Stat
     public int Speed { get => _speed; set { if (SetField(ref _speed, value)) Notify(); } }
     public int Dex { get => _dex; set { if (SetField(ref _dex, value)) Notify(); } }
     public int Agl { get => _agl; set { if (SetField(ref _agl, value)) Notify(); } }
+    public int Mov { get => _mov; set { if (SetField(ref _mov, value)) Notify(); } }
+    public int Rng { get => _range; set { if (SetField(ref _range, value)) Notify(); } }
 
     public float Avoid { get => _avoid; set { if (SetField(ref _avoid, value)) Notify(); } }
     public float Critical { get => _critical; set { if (SetField(ref _critical, value)) Notify(); } }
@@ -106,6 +111,8 @@ public class Stat
             case "Speed": return _speed;
             case "Dex": return _dex;
             case "Agl": return _agl;
+            case "Mov": return _mov;
+            case "Range": return _range;
             case "Avoid": return _avoid;
             case "Critical": return _critical;
             case "CriticalDmg": return _criticalDmg;

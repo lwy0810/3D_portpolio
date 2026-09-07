@@ -29293,7 +29293,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1058697556}
   m_Enabled: 1
-  m_Alpha: 1
+  m_Alpha: 0
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
@@ -29314,11 +29314,14 @@ MonoBehaviour:
   _nextSpritePath: Images/NextSelectInfo
   _markerSpritePath: Images/Marker
   _iconPathFormat: Icons/skill_{0:000}
+  _fontPath: Fonts & Materials/NotoSansKR-Regular SDF
   _prevCategoryKey: 276
   _nextCategoryKey: 275
   _prevItemKey: 273
   _nextItemKey: 274
-  _style:
+  _blockInputWhenHidden: 1
+  _layout:
+    Font: {fileID: 0}
     TabSize: {x: 118, y: 44}
     TabGap: 6
     TabSelectedScale: 1.14
@@ -29327,9 +29330,11 @@ MonoBehaviour:
     LabelFontSize: 20
     ArrowSize: {x: 38, y: 38}
     ArrowGap: 10
-    StripPosition: {x: 180, y: -70}
-    PanelSize: {x: 720, y: 340}
-    PanelPosition: {x: 250, y: -140}
+    PrevOffset: {x: 0, y: 0}
+    NextOffset: {x: 0, y: 0}
+    StripOffset: {x: 0, y: -70}
+    PanelSize: {x: 720, y: 500}
+    PanelOffset: {x: 0, y: -140}
     RowWidth: 690
     RowHeight: 40
     RowInsetX: 16
@@ -29340,9 +29345,11 @@ MonoBehaviour:
     CountWidth: 120
     CountInsetX: 14
     RowFontSize: 22
-    VisibleRows: 8
+    VisibleRows: 0
     MarkerSize: {x: 26, y: 26}
     MarkerOutset: 30
+    MarkerRotation: 90
+    MarkerOffset: {x: 0, y: 0}
     PanelTint: {r: 0.94, g: 0.98, b: 1, a: 0.96}
     TabTint: {r: 0.62, g: 0.86, b: 0.92, a: 0.95}
     TabSelectedTint: {r: 1, g: 1, b: 1, a: 1}
@@ -29482,7 +29489,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1062349236}
   m_Enabled: 1
-  m_Alpha: 0
+  m_Alpha: 1
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
@@ -34250,7 +34257,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1241027303
 RectTransform:
   m_ObjectHideFlags: 0
@@ -34297,7 +34304,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1241027302}
   m_Enabled: 1
-  m_Alpha: 1
+  m_Alpha: 0
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0

@@ -122,6 +122,10 @@ public class ItemSlot : MonoBehaviour
         _obj.transform.SetParent(parent, false);
 
         TextMeshProUGUI _t = _obj.GetComponent<TextMeshProUGUI>();
+
+        // 기본 LiberationSans 에는 한글 글리프가 없어 그대로 두면 글자가 깨진다
+        if (style.Font != null) _t.font = style.Font;
+
         _t.fontSize = style.RowFontSize;
         _t.color = color;
         _t.alignment = align;

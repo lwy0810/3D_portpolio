@@ -15,7 +15,8 @@ using TMPro;
 /// 씬도 같이 고쳐야 하고, 두 곳이 어긋나면 조용히 빈 칸이 남는다.
 /// ActionBar 도 같은 이유로 런타임 생성이다.
 ///
-/// 배경 스프라이트는 임시로 CraftBox 를 쓴다. 전용 리소스가 준비되면 경로만 바꾼다.
+/// 이 화면은 SetActive 가 아니라 CanvasGroup.alpha 로 열리고 닫힌다 (FieldMenuView 방식).
+/// 따라서 OnEnable 은 씬 로드 시 한 번만 호출되며, 표시 여부는 매 프레임 확인한다.
 /// </summary>
 public class ItemMenuView : MonoBehaviour
 {
@@ -31,14 +32,35 @@ public class ItemMenuView : MonoBehaviour
     [Tooltip("아이템 아이콘 경로 형식. {0} 에 iconIndex 가 3자리로 들어간다")]
     [SerializeField] private string _iconPathFormat = "Icons/skill_{0:000}";
 
+    [Header("폰트 (Resources 기준)")]
+    [Tooltip("한글 TMP 폰트 에셋 경로. 찾지 못하면 아래 대체 목록을 순서대로 시도한다")]
+    [SerializeField] private string _fontPath = "Fonts & Materials/NotoSansKR-Regular SDF";
+
     [Header("입력")]
+    [Tooltip("1 / 3 키는 항상 동작한다. 여기 지정한 키는 추가로 받는다")]
     [SerializeField] private KeyCode _prevCategoryKey = KeyCode.LeftArrow;
     [SerializeField] private KeyCode _nextCategoryKey = KeyCode.RightArrow;
     [SerializeField] private KeyCode _prevItemKey = KeyCode.UpArrow;
     [SerializeField] private KeyCode _nextItemKey = KeyCode.DownArrow;
 
+    [Tooltip("숨겨진 동안 키 입력을 무시한다. 문제가 생기면 끄면 항상 입력을 받는다")]
+    [SerializeField] private bool _blockInputWhenHidden = true;
+
     [Header("치수와 색")]
-    [SerializeField] private ItemMenuStyle _style = new ItemMenuStyle();
+    [Tooltip("위치는 화면 상단 중앙 기준 오프셋임")]
+    [SerializeField] private ItemMenuStyle _layout = new ItemMenuStyle();
+
+    /// <summary>
+    /// 지정 경로에 폰트가 없을 때 시도할 순서.
+    /// 프로젝트에 NotoSansKR-Regular SDF 는 아직 없으므로 VF(가변, Regular 포함)로 대체한다.
+    /// </summary>
+    private static readonly string[] FontFallbacks =
+    {
+        "Fonts & Materials/NotoSansKR-Regular SDF",
+        "Fonts & Materials/NotoSansKR-VF SDF",
+        "Fonts & Materials/NotoSansKR-ExtraBold SDF",
+        "Fonts & Materials/NotoSerifKR-Regular SDF"
+    };
 
     // ── 만들어진 것들 ───────────────────────────────────────
     private RectTransform _root;
@@ -57,10 +79,13 @@ public class ItemMenuView : MonoBehaviour
 
     private List<ItemData> _shown = new List<ItemData>();
 
+    private CanvasGroup[] _groups;
+
     private int _categoryIndex;
     private int _itemIndex;
     private int _scroll;
     private bool _built;
+    private bool _wasVisible;
 
     public string CurrentCategory =>
         ItemDataBase.Categories[Mathf.Clamp(_categoryIndex, 0, ItemDataBase.Categories.Length - 1)];
@@ -72,23 +97,65 @@ public class ItemMenuView : MonoBehaviour
     {
         // 메뉴가 열릴 때마다 만들지 않는다. 한 번 만든 뒤에는 내용만 갈아 끼운다
         if (!_built) Build();
-
-        _categoryIndex = 0;
-        _itemIndex = 0;
-        _scroll = 0;
-
-        RefreshCategory();
     }
 
     void Update()
     {
         if (!_built) return;
 
-        if (Input.GetKeyDown(_prevCategoryKey)) MoveCategory(-1);
-        else if (Input.GetKeyDown(_nextCategoryKey)) MoveCategory(1);
+        bool _visible = !_blockInputWhenHidden || IsVisible();
+
+        // 이 화면은 alpha 로 열리므로, 열린 순간을 감지해 선택을 처음으로 되돌린다
+        if (_visible && !_wasVisible)
+        {
+            _categoryIndex = 0;
+            RefreshCategory();
+        }
+        _wasVisible = _visible;
+
+        // 숨겨진 동안 입력을 받으면 다른 메뉴를 조작하는 중에 카테고리가 바뀐다
+        if (!_visible) return;
+
+        if (PrevPressed()) MoveCategory(-1);
+        else if (NextPressed()) MoveCategory(1);
         else if (Input.GetKeyDown(_prevItemKey)) MoveItem(-1);
         else if (Input.GetKeyDown(_nextItemKey)) MoveItem(1);
     }
+
+    // ── 표시 여부 ───────────────────────────────────────────
+
+    /// <summary>
+    /// 상위 CanvasGroup 까지 곱해 실제로 보이는지 판정한다.
+    /// 자기 CanvasGroup 만 보면 메뉴 전체가 닫힌 상태(MenuView alpha 0)를 놓친다.
+    /// </summary>
+    private bool IsVisible()
+    {
+        if (_groups == null) _groups = GetComponentsInParent<CanvasGroup>(true);
+
+        float _alpha = 1.0f;
+
+        for (int i = 0; i < _groups.Length; i++)
+        {
+            if (_groups[i] == null || !_groups[i].enabled) continue;
+
+            _alpha *= _groups[i].alpha;
+
+            if (_groups[i].ignoreParentGroups) break;
+        }
+
+        return _alpha > 0.01f;
+    }
+
+    // 1 키와 3 키는 인스펙터 값과 무관하게 항상 받는다.
+    // 참조 화면의 좌우 아이콘이 1 과 3 이며, 씬에 이미 저장된 KeyCode 값을
+    // 코드 기본값 변경만으로는 바꿀 수 없으므로 여기서 직접 처리한다.
+    private bool PrevPressed() =>
+        Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1) ||
+        Input.GetKeyDown(_prevCategoryKey);
+
+    private bool NextPressed() =>
+        Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3) ||
+        Input.GetKeyDown(_nextCategoryKey);
 
     // ── 만들기 ──────────────────────────────────────────────
 
@@ -102,6 +169,11 @@ public class ItemMenuView : MonoBehaviour
             return;
         }
 
+        // 씬에 직렬화된 값이 없는 경우를 대비함
+        if (_layout == null) _layout = new ItemMenuStyle();
+
+        _layout.Normalize();
+
         ItemDataBase.Ensure();
 
         _boxSprite = Resources.Load<Sprite>(_boxSpritePath);
@@ -112,52 +184,85 @@ public class ItemMenuView : MonoBehaviour
 
         _markerSprite = Resources.Load<Sprite>(_markerSpritePath);
 
+        ResolveFont();
+
         BuildCategoryStrip();
         BuildItemPanel();
 
         _built = true;
     }
 
+    /// <summary>
+    /// 한글 폰트. 인스펙터에 직접 지정한 것이 있으면 그것을 쓰고, 없으면 경로로 로드한다.
+    /// 기본 LiberationSans 에는 한글 글리프가 없어 그대로 두면 글자가 깨진다.
+    /// </summary>
+    private void ResolveFont()
+    {
+        if (_layout.Font != null) return;
+
+        if (!string.IsNullOrEmpty(_fontPath))
+        {
+            _layout.Font = Resources.Load<TMP_FontAsset>(_fontPath);
+            if (_layout.Font != null) return;
+        }
+
+        for (int i = 0; i < FontFallbacks.Length; i++)
+        {
+            _layout.Font = Resources.Load<TMP_FontAsset>(FontFallbacks[i]);
+
+            if (_layout.Font != null)
+            {
+                Debug.Log($"[ItemMenuView] 폰트 대체 : {FontFallbacks[i]}");
+                return;
+            }
+        }
+
+        Debug.LogWarning("[ItemMenuView] 한글 TMP 폰트를 찾지 못했습니다. " +
+                         "TextMesh Pro/Resources/Fonts & Materials 에 NotoSansKR SDF 에셋이 있는지 확인하세요.");
+    }
+
     private void BuildCategoryStrip()
     {
         _strip = MakeRect("CategoryStrip", _root);
-        _strip.anchorMin = new Vector2(0.0f, 1.0f);
-        _strip.anchorMax = new Vector2(0.0f, 1.0f);
-        _strip.pivot = new Vector2(0.0f, 1.0f);
-        _strip.anchoredPosition = _style.StripPosition;
-        _strip.sizeDelta = new Vector2(10.0f, _style.TabSize.y);
+
+        // 상단 중앙 기준. 폭이 바뀌어도 좌우 여백이 같게 유지된다
+        _strip.anchorMin = new Vector2(0.5f, 1.0f);
+        _strip.anchorMax = new Vector2(0.5f, 1.0f);
+        _strip.pivot = new Vector2(0.5f, 1.0f);
+        _strip.anchoredPosition = _layout.StripOffset;
+        _strip.sizeDelta = new Vector2(10.0f, _layout.TabSize.y);
 
         float _x = 0.0f;
 
         // CATEGORIES 라벨. 배경은 목록과 같은 임시 스프라이트를 쓴다
-        Image _labelBox = MakeSpriteImage("CategoriesLabel", _strip, _boxSprite, _style.LabelBoxTint);
-        Place(_labelBox.rectTransform, _x, _style.LabelSize);
+        Image _labelBox = MakeSpriteImage("CategoriesLabel", _strip, _boxSprite, _layout.LabelBoxTint);
+        Place(_labelBox.rectTransform, _x, _layout.LabelSize, Vector2.zero);
 
         TextMeshProUGUI _labelText = MakeText("Text", _labelBox.rectTransform,
-                                              _style.LabelFontSize, _style.LabelTextColor,
+                                              _layout.LabelFontSize, _layout.LabelTextColor,
                                               TextAlignmentOptions.Center);
         StretchTo(_labelText.rectTransform);
         _labelText.text = "CATEGORIES";
         _labelText.fontStyle = FontStyles.Bold;
 
-        _x += _style.LabelSize.x + _style.ArrowGap;
+        _x += _layout.LabelSize.x + _layout.ArrowGap;
 
         // 좌측 버튼
         Image _prev = MakeSpriteImage("PrevSelectButton", _strip,
                                       Resources.Load<Sprite>(_prevSpritePath), Color.white);
-        Place(_prev.rectTransform, _x, _style.ArrowSize);
+        Place(_prev.rectTransform, _x, _layout.ArrowSize, _layout.PrevOffset);
         AddClick(_prev.gameObject, -1);
 
-        _x += _style.ArrowSize.x + _style.ArrowGap;
+        _x += _layout.ArrowSize.x + _layout.ArrowGap;
 
         // 카테고리 탭
         for (int i = 0; i < ItemDataBase.Categories.Length; i++)
         {
-            Image _box = MakeSpriteImage($"CategoryTab_{i}", _strip, _boxSprite, _style.TabTint);
-            Place(_box.rectTransform, _x, _style.TabSize);
+            Image _box = MakeSpriteImage($"CategoryTab_{i}", _strip, _boxSprite, _layout.TabTint);
+            Place(_box.rectTransform, _x, _layout.TabSize, Vector2.zero);
 
             TextMeshProUGUI _text = MakeText("Text", _box.rectTransform,
-                                             _style.TabFontSize, _style.TabTextColor,
+                                             _layout.TabFontSize, _layout.TabTextColor,
                                              TextAlignmentOptions.Center);
             StretchTo(_text.rectTransform);
             _text.text = ItemDataBase.Categories[i];
@@ -168,53 +273,60 @@ public class ItemMenuView : MonoBehaviour
             _tabBoxes.Add(_box);
             _tabTexts.Add(_text);
 
-            _x += _style.TabSize.x + _style.TabGap;
+            _x += _layout.TabSize.x + _layout.TabGap;
         }
 
-        _x += _style.ArrowGap - _style.TabGap;
+        _x += _layout.ArrowGap - _layout.TabGap;
 
         // 우측 버튼
         Image _next = MakeSpriteImage("NextSelectButton", _strip,
                                       Resources.Load<Sprite>(_nextSpritePath), Color.white);
-        Place(_next.rectTransform, _x, _style.ArrowSize);
+        Place(_next.rectTransform, _x, _layout.ArrowSize, _layout.NextOffset);
         AddClick(_next.gameObject, 1);
 
-        _x += _style.ArrowSize.x;
+        _x += _layout.ArrowSize.x;
 
-        _strip.sizeDelta = new Vector2(_x, _style.TabSize.y);
+        // 자식을 다 놓은 뒤 폭을 확정한다. 자식은 왼쪽 변 기준이라 폭이 바뀌면 함께 이동한다
+        _strip.sizeDelta = new Vector2(_x, _layout.TabSize.y);
     }
 
     private void BuildItemPanel()
     {
-        Image _panelImage = MakeSpriteImage("ItemListPanel", _root, _boxSprite, _style.PanelTint);
+        Image _panelImage = MakeSpriteImage("ItemListPanel", _root, _boxSprite, _layout.PanelTint);
         _panel = _panelImage.rectTransform;
 
-        _panel.anchorMin = new Vector2(0.0f, 1.0f);
-        _panel.anchorMax = new Vector2(0.0f, 1.0f);
-        _panel.pivot = new Vector2(0.0f, 1.0f);
-        _panel.anchoredPosition = _style.PanelPosition;
-        _panel.sizeDelta = _style.PanelSize;
+        _panel.anchorMin = new Vector2(0.5f, 1.0f);
+        _panel.anchorMax = new Vector2(0.5f, 1.0f);
+        _panel.pivot = new Vector2(0.5f, 1.0f);
+        _panel.anchoredPosition = _layout.PanelOffset;
+        _panel.sizeDelta = _layout.PanelSize;
 
         // 선택 표식. 패널 왼쪽 바깥에 둔다
         if (_markerSprite != null)
         {
-            _marker = MakeSpriteImage("SelectMarker", _panel, _markerSprite, _style.MarkerTint);
+            _marker = MakeSpriteImage("SelectMarker", _panel, _markerSprite, _layout.MarkerTint);
 
             RectTransform _mr = _marker.rectTransform;
             _mr.anchorMin = new Vector2(0.0f, 1.0f);
             _mr.anchorMax = new Vector2(0.0f, 1.0f);
-            _mr.pivot = new Vector2(1.0f, 0.5f);
-            _mr.sizeDelta = _style.MarkerSize;
+
+            // 피벗을 중앙에 둔다. 회전이 피벗을 중심으로 일어나므로, 한쪽 변에 두면
+            // 돌리는 순간 표식이 그 변을 축으로 밀려나간다
+            _mr.pivot = new Vector2(0.5f, 0.5f);
+            _mr.sizeDelta = _layout.MarkerSize;
+
+            // Marker.png 는 아래를 향하는 화살표다. 90 도 돌려 오른쪽을 향하게 한다
+            _mr.localRotation = Quaternion.Euler(0.0f, 0.0f, _layout.MarkerRotation);
         }
 
-        int _rows = Mathf.Max(1, _style.VisibleRows);
+        int _rows = Mathf.Max(1, _layout.VisibleRows);
 
         for (int i = 0; i < _rows; i++)
         {
             GameObject _obj = new GameObject($"ItemSlot_{i}",
                                              typeof(RectTransform), typeof(ItemSlot));
             ItemSlot _slot = _obj.GetComponent<ItemSlot>();
-            _slot.Build(_panel, _style, i);
+            _slot.Build(_panel, _layout, i);
             _slots.Add(_slot);
         }
     }
@@ -242,11 +354,11 @@ public class ItemMenuView : MonoBehaviour
         {
             bool _on = i == _categoryIndex;
 
-            _tabBoxes[i].color = _on ? _style.TabSelectedTint : _style.TabTint;
-            _tabTexts[i].color = _on ? _style.TabSelectedTextColor : _style.TabTextColor;
+            _tabBoxes[i].color = _on ? _layout.TabSelectedTint : _layout.TabTint;
+            _tabTexts[i].color = _on ? _layout.TabSelectedTextColor : _layout.TabTextColor;
 
             // 선택된 탭만 살짝 키운다. 원본도 선택 탭이 위로 튀어나온다
-            float _s = _on ? _style.TabSelectedScale : 1.0f;
+            float _s = _on ? _layout.TabSelectedScale : 1.0f;
             _tabBoxes[i].rectTransform.localScale = new Vector3(_s, _s, 1.0f);
         }
     }
@@ -285,8 +397,14 @@ public class ItemMenuView : MonoBehaviour
 
         if (!_visible) return;
 
-        float _y = -(_style.RowInsetY + _row * _style.RowHeight + _style.RowHeight * 0.5f);
-        _marker.rectTransform.anchoredPosition = new Vector2(_style.MarkerOutset * -1.0f + _style.RowInsetX, _y);
+        // 줄의 세로 중앙. 패널 좌상단이 기준점이다
+        float _y = -(_layout.RowInsetY + _row * _layout.RowHeight + _layout.RowHeight * 0.5f);
+
+        // 패널 왼쪽 바깥. 피벗이 중앙이므로 이 값이 표식의 중심이다
+        float _x = _layout.RowInsetX - _layout.MarkerOutset;
+
+        _marker.rectTransform.anchoredPosition =
+            new Vector2(_x, _y) + _layout.MarkerOffset;
     }
 
     // ── 이동 ────────────────────────────────────────────────
@@ -371,14 +489,17 @@ public class ItemMenuView : MonoBehaviour
         return _img;
     }
 
-    private static TextMeshProUGUI MakeText(string name, RectTransform parent,
-                                            float size, Color color,
-                                            TextAlignmentOptions align)
+    private TextMeshProUGUI MakeText(string name, RectTransform parent,
+                                     float size, Color color,
+                                     TextAlignmentOptions align)
     {
         GameObject _obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         _obj.transform.SetParent(parent, false);
 
         TextMeshProUGUI _t = _obj.GetComponent<TextMeshProUGUI>();
+
+        if (_layout.Font != null) _t.font = _layout.Font;
+
         _t.fontSize = size;
         _t.color = color;
         _t.alignment = align;
@@ -389,13 +510,13 @@ public class ItemMenuView : MonoBehaviour
     }
 
     /// <summary>탭 줄 안에서 왼쪽부터 순서대로 놓는다.</summary>
-    private static void Place(RectTransform rt, float x, Vector2 size)
+    private static void Place(RectTransform rt, float x, Vector2 size, Vector2 offset)
     {
         rt.anchorMin = new Vector2(0.0f, 0.5f);
         rt.anchorMax = new Vector2(0.0f, 0.5f);
         rt.pivot = new Vector2(0.0f, 0.5f);
         rt.sizeDelta = size;
-        rt.anchoredPosition = new Vector2(x, 0.0f);
+        rt.anchoredPosition = new Vector2(x, 0.0f) + offset;
     }
 
     private static void StretchTo(RectTransform rt)
@@ -409,14 +530,23 @@ public class ItemMenuView : MonoBehaviour
     /// <summary>Prev / Next 버튼. 마우스로도 넘길 수 있게 한다.</summary>
     private void AddClick(GameObject obj, int delta)
     {
-        Button _btn = obj.AddComponent<Button>();
-        _btn.onClick.AddListener(() => MoveCategory(delta));
+        ItemMenuClickRelay _relay = obj.AddComponent<ItemMenuClickRelay>();
+        _relay.Bind(() => MoveCategory(delta));
     }
 
     /// <summary>탭 직접 클릭.</summary>
     private void AddSelect(GameObject obj, int index)
     {
-        Button _btn = obj.AddComponent<Button>();
-        _btn.onClick.AddListener(() => SelectCategory(index));
+        ItemMenuClickRelay _relay = obj.AddComponent<ItemMenuClickRelay>();
+        _relay.Bind(() => SelectCategory(index));
+    }
+
+    // ── 점검 ────────────────────────────────────────────────
+
+    [ContextMenu("치수와 색 기본값으로 되돌리기")]
+    private void ResetLayout()
+    {
+        _layout = new ItemMenuStyle();
+        Debug.Log("[ItemMenuView] 치수와 색을 기본값으로 되돌렸습니다. 씬을 저장하세요.");
     }
 }

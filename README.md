@@ -52,4 +52,4 @@ Docs/              # 기획/검증 문서
 
 ---
 
-📩 문의: lwy810@naver.com
+📩 문의: lwy810@naver.com / 플레이 영상 : https://youtu.be/ffGkqHZgr_M

@@ -54,6 +54,11 @@ public class BattleStage : MonoBehaviour
     [SerializeField] private float _retreatPushBack = 4.0f;
     [Tooltip("승리로 사라진 필드 몬스터를 다시 만들기까지의 시간(초). 0 이면 재생성하지 않는다")]
     [SerializeField] private float _respawnSeconds = 8.0f;
+    [Tooltip("재생성 시 파티와 최소한 이만큼 떨어져 있어야 한다(m). " +
+             "0 이면 몬스터의 조우 트리거 반경에서 자동 산출한다")]
+    [SerializeField] private float _respawnMinDistance = 0.0f;
+    [Tooltip("파티가 계속 근처에 있을 때 재생성을 기다리는 최대 시간(초). 넘기면 포기한다")]
+    [SerializeField] private float _respawnMaxWait = 60.0f;
 
     // ── 되돌리기용 필드 상태 ────────────────────────────────
     private struct FieldSnapshot
@@ -347,11 +352,40 @@ public class BattleStage : MonoBehaviour
         Debug.Log($"[BattleStage] 필드 복구 완료 (승리 {victory})");
     }
 
+    /// <summary>
+    /// 승리로 사라진 필드 몬스터를 다시 만든다.
+    ///
+    /// 파티가 그 자리 근처에 있으면 만들지 않고 기다린다.
+    ///
+    /// 예전에는 지연 시간만 기다린 뒤 조우 지점에 그대로 생성했다. 승리 시 리더는
+    /// 조우 지점으로 복귀하고 그 지점은 몬스터의 조우 트리거 반경 안이다.
+    /// (Bear 는 isTrigger SphereCollider 반경 2m) 그래서 지연 시간이 지나면
+    /// 플레이어 발밑에 트리거가 새로 생기고, Unity 가 OnTriggerEnter 를 발생시켜
+    /// 전투가 즉시 다시 시작됐다.
+    /// </summary>
     private IEnumerator RespawnFieldMonster(Vector3 pos, Quaternion rot, float delay)
     {
         yield return new WaitForSeconds(delay);
 
-        // 그 사이에 새 전투가 시작됐으면 끼어들지 않는다
+        float _safe = SafeRespawnDistance();
+        float _waited = 0.0f;
+
+        while (!PartyFarFrom(pos, _safe))
+        {
+            // 그 사이에 새 전투가 시작됐으면 끼어들지 않는다
+            if (!GameFlow.IsField) yield break;
+
+            if (_waited >= _respawnMaxWait)
+            {
+                Debug.Log($"[BattleStage] 파티가 {_safe:F1}m 안에 계속 머물러 " +
+                          $"필드 몬스터 재생성을 포기합니다. ({pos})");
+                yield break;
+            }
+
+            yield return new WaitForSeconds(1.0f);
+            _waited += 1.0f;
+        }
+
         if (!GameFlow.IsField) yield break;
 
         UnitCreateSystem _creator = FindFirstObjectByType<UnitCreateSystem>(FindObjectsInactive.Include);
@@ -359,7 +393,54 @@ public class BattleStage : MonoBehaviour
 
         GameObject _obj = _creator.CreateFieldMonsterAt(pos, rot);
 
-        if (_obj != null) Debug.Log($"[BattleStage] 필드 몬스터를 {pos} 에 다시 만들었습니다.");
+        if (_obj != null)
+        {
+            Debug.Log($"[BattleStage] 필드 몬스터를 {pos} 에 다시 만들었습니다. " +
+                      $"(파티와 {_safe:F1}m 이상 떨어진 것을 확인, 대기 {_waited:F0}초)");
+        }
+    }
+
+    /// <summary>
+    /// 재생성 안전 거리. 지정값이 없으면 몬스터 프리팹의 조우 트리거 반경에서 구한다.
+    /// 트리거 반경을 코드에 박지 않으므로 프리팹에서 값을 바꿔도 따라온다.
+    /// </summary>
+    private float SafeRespawnDistance()
+    {
+        if (_respawnMinDistance > 0.0f) return _respawnMinDistance;
+
+        float _trigger = 2.0f;
+
+        GameManager _gm = GameManager.GameInstance;
+        if (_gm != null && _gm._monsterPrefabs != null)
+        {
+            SphereCollider[] _spheres = _gm._monsterPrefabs.GetComponentsInChildren<SphereCollider>(true);
+
+            for (int i = 0; i < _spheres.Length; i++)
+            {
+                if (_spheres[i] == null || !_spheres[i].isTrigger) continue;
+                _trigger = Mathf.Max(_trigger, _spheres[i].radius);
+            }
+        }
+
+        // 트리거 반경 + 캐릭터 반지름 + 여유
+        return _trigger + 3.0f;
+    }
+
+    /// <summary>파티 전원이 지정 지점에서 safe 이상 떨어져 있는지.</summary>
+    private static bool PartyFarFrom(Vector3 pos, float safe)
+    {
+        GameManager _gm = GameManager.GameInstance;
+        if (_gm == null || _gm.Characters == null) return true;
+
+        for (int i = 0; i < _gm.Characters.Count; i++)
+        {
+            GameObject _c = _gm.Characters[i];
+            if (_c == null || !_c.activeInHierarchy) continue;
+
+            if (FlatDistance(_c.transform.position, pos) < safe) return false;
+        }
+
+        return true;
     }
 
     /// <summary>전투 영역의 중심. 카메라가 바라볼 지점.</summary>

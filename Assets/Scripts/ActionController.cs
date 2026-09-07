@@ -14,6 +14,10 @@ public class ActionController : MonoBehaviour
     [Tooltip("달리기 속도")]
     [SerializeField] private float _runSpeed = 5.0f;
 
+    [Header("전투 조우")]
+    [Tooltip("전투 종료 후 이 시간(초) 동안은 조우를 받지 않는다. 종료 직후 즉시 재조우하는 것을 막는다")]
+    [SerializeField] private float _encounterGrace = 1.5f;
+
     [Header("중력")]
     [SerializeField] private float _gravity = -9.8f;
     [Tooltip("접지 중 바닥에 붙여두는 힘. 0 이면 경사에서 통통 튄다")]
@@ -241,15 +245,27 @@ public class ActionController : MonoBehaviour
     // 이제 씬을 갈지 않으므로 전투가 끝날 때 BattleManager 가 명시적으로 풀어준다.
     private bool _encounterTriggered = false;
 
+    /// <summary>이 시각까지는 조우를 받지 않는다. 전투 종료 직후의 잔여 겹침을 넘긴다.</summary>
+    private float _encounterReadyTime = 0.0f;
+
     /// <summary>전투 종료 후 다시 조우할 수 있게 한다. BattleManager 가 호출한다.</summary>
     public void ResetEncounter()
     {
         _encounterTriggered = false;
+
+        // 전투 직후에는 잠시 조우를 받지 않는다. 몬스터가 되살아나거나
+        // 재생성되는 시점에 플레이어와 겹쳐 있으면 트리거가 즉시 다시 발동한다.
+        _encounterReadyTime = Time.time + Mathf.Max(0.0f, _encounterGrace);
     }
 
     private void OnTriggerEnter(Collider other)
     {
         if (_encounterTriggered)
+        {
+            return;
+        }
+
+        if (Time.time < _encounterReadyTime)
         {
             return;
         }

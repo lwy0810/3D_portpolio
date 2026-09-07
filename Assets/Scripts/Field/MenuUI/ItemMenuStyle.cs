@@ -44,6 +44,14 @@ public class ItemMenuStyle
     [Tooltip("탭 줄 위치. 화면 상단 중앙 기준 오프셋이며 X 0 이면 좌우 여백이 같다")]
     public Vector2 StripOffset = new Vector2(0.0f, -70.0f);
 
+    [Header("좌우 흔들림 연출")]
+    [Tooltip("좌우로 움직이는 거리(픽셀). 0 이면 흔들지 않는다")]
+    public float NudgeAmplitude = 5.0f;
+    [Tooltip("1왕복에 걸리는 시간(초)")]
+    public float NudgePeriod = 1.2f;
+    [Tooltip("왕복 사이 정지 시간(초). 0 이면 쉬지 않고 이어진다")]
+    public float NudgePause = 0.4f;
+
     [Header("아이템 목록")]
     [Tooltip("목록 패널 크기")]
     public Vector2 PanelSize = new Vector2(720.0f, 500.0f);
@@ -118,6 +126,11 @@ public class ItemMenuStyle
         if (MarkerSize.x <= 0.0f || MarkerSize.y <= 0.0f) MarkerSize = new Vector2(26.0f, 26.0f);
 
         if (TabSelectedScale <= 0.0f) TabSelectedScale = 1.14f;
+
+        // 진폭 0 은 "흔들지 않음" 이라는 유효한 설정이므로 되돌리지 않는다.
+        // 주기만 0 이면 0 나눗셈이 되므로 보정한다
+        if (NudgePeriod <= 0.0f) NudgePeriod = 1.2f;
+        if (NudgePause < 0.0f) NudgePause = 0.0f;
         if (RowHeight <= 0.0f) RowHeight = 40.0f;
         if (RowWidth <= 0.0f) RowWidth = PanelSize.x - RowInsetX * 2.0f;
         if (IconSize <= 0.0f) IconSize = 30.0f;

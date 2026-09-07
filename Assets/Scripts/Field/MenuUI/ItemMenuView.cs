@@ -67,6 +67,7 @@ public class ItemMenuView : MonoBehaviour
     private RectTransform _strip;
     private RectTransform _panel;
     private Image _marker;
+    private ItemMenuNudge _markerNudge;
 
     private readonly List<Image> _tabBoxes = new List<Image>();
     private readonly List<TextMeshProUGUI> _tabTexts = new List<TextMeshProUGUI>();
@@ -243,7 +244,7 @@ public class ItemMenuView : MonoBehaviour
                                               TextAlignmentOptions.Center);
         StretchTo(_labelText.rectTransform);
         _labelText.text = "CATEGORIES";
-        _labelText.fontStyle = FontStyles.Bold;
+        //_labelText.fontStyle = FontStyles.Bold;
 
         _x += _layout.LabelSize.x + _layout.ArrowGap;
 
@@ -252,6 +253,9 @@ public class ItemMenuView : MonoBehaviour
                                       Resources.Load<Sprite>(_prevSpritePath), Color.white);
         Place(_prev.rectTransform, _x, _layout.ArrowSize, _layout.PrevOffset);
         AddClick(_prev.gameObject, -1);
+
+        // 왼쪽을 가리키는 버튼이므로 왼쪽으로 먼저 나간다
+        AddNudge(_prev.gameObject, Vector2.left);
 
         _x += _layout.ArrowSize.x + _layout.ArrowGap;
 
@@ -266,7 +270,7 @@ public class ItemMenuView : MonoBehaviour
                                              TextAlignmentOptions.Center);
             StretchTo(_text.rectTransform);
             _text.text = ItemDataBase.Categories[i];
-            _text.fontStyle = FontStyles.Bold;
+            //_text.fontStyle = FontStyles.Bold;
 
             AddSelect(_box.gameObject, i);
 
@@ -283,6 +287,10 @@ public class ItemMenuView : MonoBehaviour
                                       Resources.Load<Sprite>(_nextSpritePath), Color.white);
         Place(_next.rectTransform, _x, _layout.ArrowSize, _layout.NextOffset);
         AddClick(_next.gameObject, 1);
+
+        // 오른쪽을 가리키는 버튼이므로 오른쪽으로 먼저 나간다.
+        // Prev 와 방향이 반대여서 두 버튼이 좌우로 함께 벌어졌다 모인다
+        AddNudge(_next.gameObject, Vector2.right);
 
         _x += _layout.ArrowSize.x;
 
@@ -317,6 +325,9 @@ public class ItemMenuView : MonoBehaviour
 
             // Marker.png 는 아래를 향하는 화살표다. 90 도 돌려 오른쪽을 향하게 한다
             _mr.localRotation = Quaternion.Euler(0.0f, 0.0f, _layout.MarkerRotation);
+
+            // 가리키는 방향으로 흔든다
+            _markerNudge = AddNudge(_marker.gameObject, Vector2.right);
         }
 
         int _rows = Mathf.Max(1, _layout.VisibleRows);
@@ -403,8 +414,11 @@ public class ItemMenuView : MonoBehaviour
         // 패널 왼쪽 바깥. 피벗이 중앙이므로 이 값이 표식의 중심이다
         float _x = _layout.RowInsetX - _layout.MarkerOutset;
 
-        _marker.rectTransform.anchoredPosition =
-            new Vector2(_x, _y) + _layout.MarkerOffset;
+        Vector2 _pos = new Vector2(_x, _y) + _layout.MarkerOffset;
+
+        // anchoredPosition 을 직접 쓰면 흔들린 값이 기준으로 굳어 위치가 밀린다
+        if (_markerNudge != null) _markerNudge.SetBase(_pos);
+        else _marker.rectTransform.anchoredPosition = _pos;
     }
 
     // ── 이동 ────────────────────────────────────────────────
@@ -532,6 +546,19 @@ public class ItemMenuView : MonoBehaviour
     {
         ItemMenuClickRelay _relay = obj.AddComponent<ItemMenuClickRelay>();
         _relay.Bind(() => MoveCategory(delta));
+    }
+
+    /// <summary>
+    /// 좌우 흔들림. 진폭이 0 이면 붙이지 않는다 —
+    /// 동작하지 않는 컴포넌트가 하이어라키에 남으면 오해를 부른다.
+    /// </summary>
+    private ItemMenuNudge AddNudge(GameObject obj, Vector2 direction)
+    {
+        if (_layout.NudgeAmplitude <= 0.0f) return null;
+
+        ItemMenuNudge _nudge = obj.AddComponent<ItemMenuNudge>();
+        _nudge.Bind(direction, _layout.NudgeAmplitude, _layout.NudgePeriod, _layout.NudgePause);
+        return _nudge;
     }
 
     /// <summary>탭 직접 클릭.</summary>

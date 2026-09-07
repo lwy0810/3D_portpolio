@@ -52,4 +52,4 @@ Docs/              # 기획/검증 문서
 
 ---
 
-📩 문의: lwy91810@gmail.com
+📩 문의: lwy810@naver.com

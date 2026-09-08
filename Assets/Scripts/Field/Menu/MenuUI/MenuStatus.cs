@@ -21,8 +21,7 @@ using TMPro;
 /// 하나하나 꽂아두면 개수가 바뀔 때마다 손이 가고, 이름이 이미 하이어라키에
 /// 고정돼 있으니 이름으로 찾는 편이 어긋날 일이 적다.
 ///
-/// MOV(이동력) · RNG(사거리) 는 Stat 클래스에 아직 대응 값이 없다. 값 텍스트를
-/// "-" 로 둔다 — 나중에 필드가 추가되면 여기만 고치면 된다.
+/// MOV(이동력) · RNG(사거리) 는 Stat.Mov / Stat.Rng 값을 그대로 표시한다.
 /// </summary>
 public class MenuStatus : MonoBehaviour
 {
@@ -402,9 +401,8 @@ public class MenuStatus : MonoBehaviour
         SetText(_dexValueText, stat.Dex.ToString());
         SetText(_aglValueText, stat.Agl.ToString());
 
-        // Stat 에 이동력 / 사거리 값이 아직 없다. 필드가 추가되면 여기만 바꾸면 된다
-        SetText(_movValueText, "-");
-        SetText(_rngValueText, "-");
+        SetText(_movValueText, stat.Mov.ToString());
+        SetText(_rngValueText, stat.Rng.ToString());
 
         SetText(_avoidValueText, $"{stat.Avoid * 100f:0}%");
         SetText(_hitValueText, $"{stat.Hit * 100f:0}%");

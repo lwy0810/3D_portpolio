@@ -112,7 +112,8 @@ public class Stat
             case "Dex": return _dex;
             case "Agl": return _agl;
             case "Mov": return _mov;
-            case "Range": return _range;
+            case "Range": // 구 이름. 데이터에 이미 "Range" 로 박혀 있을 수 있어 계속 받아준다
+            case "Rng": return _range;
             case "Avoid": return _avoid;
             case "Critical": return _critical;
             case "CriticalDmg": return _criticalDmg;
